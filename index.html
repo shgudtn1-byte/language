@@ -29,7 +29,7 @@ button.pri{background:var(--accent);border-color:var(--accent);color:var(--accen
 button.big{width:100%;padding:14px;font-size:17px}
 button.sm{padding:6px 10px;font-size:14px}
 button:disabled{opacity:.5;cursor:default}
-input[type=text],textarea,select{width:100%;font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+input[type=text],input[type=password],textarea,select{width:100%;font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
 textarea{min-height:70px;resize:vertical}
 input:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
 label.f{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
@@ -85,7 +85,7 @@ label.f{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
 .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 .grid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;cursor:pointer;border:3px solid transparent;background:var(--bg)}
 .grid img:hover{border-color:var(--accent)}
-.adm{margin-left:auto;font-size:13px;color:var(--muted);text-decoration:none;border:1px solid var(--line);padding:5px 10px;border-radius:16px;white-space:nowrap;background:var(--card)}
+.adm{margin-left:8px;font-size:13px;color:var(--muted);text-decoration:none;border:1px solid var(--line);padding:5px 10px;border-radius:16px;white-space:nowrap;background:var(--card)}
 .adm:hover{border-color:var(--accent);color:var(--accent)}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px}
 .tiles div{background:var(--bg);border-radius:10px;padding:10px;text-align:center}
@@ -95,7 +95,7 @@ label.f{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
 </head>
 <body>
 <div class="wrap">
-  <header><div class="flag"><i></i><i></i><i></i></div><div><h1>매일 불어 테스트</h1><div class="muted" id="sub"></div></div><a href="#admin" class="adm" id="adm">🔒 관리자</a></header>
+  <header><div class="flag"><i></i><i></i><i></i></div><div><h1>매일 불어 테스트</h1><div class="muted" id="sub"></div></div><span id="sync" style="margin-left:auto;font-size:18px;cursor:pointer"></span><a href="#admin" class="adm" id="adm">🔒 관리자</a></header>
   <main id="view"></main>
 </div>
 <nav id="nav"></nav>
@@ -128,9 +128,9 @@ function seed(){
   };
 }
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&Array.isArray(d.items))return d}catch(e){}return seed()}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function save(){if(typeof onSaved==='function')onSaved();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 let S=load();
-function fix(){S.todos=S.todos||{};S.diary=S.diary||{};S.history=S.history||[];S.settings=S.settings||{}}
+function fix(){S.todos=S.todos||{};S.diary=S.diary||{};S.history=S.history||[];S.settings=S.settings||{};S.wrong=S.wrong||{};S.log=S.log||{};S.stamp=S.stamp||{}}
 fix();
 
 // ---------- 유틸 ----------
@@ -306,6 +306,7 @@ function render(){
   renderNav();
   $('#adm').textContent=adminOk?'🔓 관리자':'🔒 관리자';
   ({home:vHome,add:vAdd,test:vTest,wrong:vWrong,list:vList,admin:vAdmin})[tab]();
+  if(typeof setSync==='function'&&syncState)setSync(syncState);
 }
 
 // accent bar (단어 입력 도와주기)
@@ -607,7 +608,9 @@ function vList(){
     <label class="opts" style="margin-top:10px"><label><input type="checkbox" id="strict" ${st.strict?'checked':''}><span><b>악센트까지 엄격하게 채점</b><small>끄면 é/e 차이는 맞음 + 경고로 처리해요</small></span></label></label>
     <label class="f">백업 (이 브라우저에만 저장되니 가끔 백업하세요)</label>
     <div class="row"><button class="btn sm" id="exp">⬇️ 백업 파일 받기</button><button class="btn sm" id="imp">⬆️ 백업 불러오기</button><input type="file" id="file" accept=".json" class="hide"></div>
-  </div>`;
+  </div>
+  ${syncCard()}`;
+  bindSyncCard();
   const qi=$('#q');qi.oninput=()=>{q=qi.value;const p=qi.selectionStart;vList();const n=$('#q');n.focus();n.setSelectionRange(p,p)};
   bindRows();
   const c=$('#clrs');if(c)c.onclick=()=>{if(!confirm('예시 문장을 지울까요?'))return;const ids=new Set(S.items.filter(x=>x.sample).map(x=>x.id));S.items=S.items.filter(x=>!x.sample);ids.forEach(i=>delete S.wrong[i]);save();render()};
@@ -822,7 +825,9 @@ function aSet(){
   <div class="card"><h2>백업</h2>
     <div class="muted">공부 기록, 할 일, 일기, 사진이 모두 한 파일에 들어가요. 불러오기는 📚 목록 탭에서 할 수 있어요.</div>
     <button class="btn sm" id="ax" style="margin-top:8px">⬇️ 전체 백업 받기</button>
-  </div>`;
+  </div>
+  ${syncCard()}`;
+  bindSyncCard();
   $('#pc').onclick=()=>{
     const [a,b,c]=['#p0','#p1','#p2'].map(s=>$(s).value);
     if(fnv(a)!==(S.settings.pwHash||PW_DEFAULT))return toast('지금 비밀번호가 틀렸어요');
@@ -833,8 +838,174 @@ function aSet(){
   $('#ax').onclick=exportData;
 }
 
+// ---------- ☁️ 기기 간 동기화 (GitHub 비공개 저장소의 data.json) ----------
+// 기록을 작은 조각(표현 1개, 하루 할 일, 하루 일기…)으로 나눠 조각마다 마지막 수정 시각을 기억하고,
+// 두 기기의 기록을 합칠 때 조각별로 더 최근 것을 골라요. 그래서 다른 기기에서 쓴 내용이 서로 덮어써지지 않아요.
+var snap=null,syncTimer=null,syncing=false,syncAgain=false,syncState='off',renderLater=false;
+const SK='frstudy.sync';
+var SYNC=(()=>{try{return JSON.parse(localStorage.getItem(SK))||{}}catch(_){return {}}})();
+function saveSync(){try{localStorage.setItem(SK,JSON.stringify(SYNC))}catch(_){}}
+const syncOn=()=>!!(SYNC.repo&&SYNC.token);
+
+function parts(s){
+  const p={};
+  (s.items||[]).forEach(x=>p['item:'+x.id]=JSON.stringify(x));
+  for(const d in s.todos||{})p['todos:'+d]=JSON.stringify(s.todos[d]);
+  for(const d in s.diary||{})p['diary:'+d]=JSON.stringify(s.diary[d]);
+  for(const d in s.log||{})p['log:'+d]=JSON.stringify(s.log[d]);
+  p.wrong=JSON.stringify(s.wrong||{});p.settings=JSON.stringify(s.settings||{});
+  return p;
+}
+function stampChanges(){
+  const now=Date.now(),cur=parts(S);S.stamp=S.stamp||{};
+  if(snap){for(const k in cur)if(cur[k]!==snap[k])S.stamp[k]=now;for(const k in snap)if(!(k in cur))S.stamp[k]=now}
+  snap=cur;
+}
+function onSaved(){
+  stampChanges();
+  if(syncOn()){clearTimeout(syncTimer);setSync('wait');syncTimer=setTimeout(()=>{syncTimer=null;syncNow()},4000)}
+}
+function rebuild(p,base){
+  const s={...base,items:[],todos:{},diary:{},log:{},wrong:{},settings:{}};
+  for(const k in p){
+    const v=JSON.parse(p[k]);
+    if(k==='wrong'){s.wrong=v;continue}if(k==='settings'){s.settings=v;continue}
+    const i=k.indexOf(':'),t=k.slice(0,i),id=k.slice(i+1);
+    if(t==='item')s.items.push(v);else if(t==='todos')s.todos[id]=v;else if(t==='diary')s.diary[id]=v;else if(t==='log')s.log[id]=v;
+  }
+  s.items.sort((a,b)=>a.added<b.added?-1:a.added>b.added?1:0);
+  return s;
+}
+function merge(L,R){
+  const pl=parts(L),pr=parts(R),sl=L.stamp||{},sr=R.stamp||{},out={},st={};
+  const keys=new Set([...Object.keys(pl),...Object.keys(pr),...Object.keys(sl),...Object.keys(sr)]);
+  for(const k of keys){
+    const a=sl[k]||0,b=sr[k]||0,src=(b>a||(b===a&&!(k in pl)))?pr:pl;
+    if(k in src)out[k]=src[k];
+    st[k]=Math.max(a,b);
+  }
+  const s=rebuild(out,L);s.stamp=st;
+  const seen=new Set();
+  s.history=[...(L.history||[]),...(R.history||[])].filter(h=>{const id=JSON.stringify(h);if(seen.has(id))return false;seen.add(id);return true})
+    .sort((a,b)=>(a.d+a.at)<(b.d+b.at)?-1:(a.d+a.at)>(b.d+b.at)?1:0);
+  return s;
+}
+const sig=s=>{const p=parts(s);return Object.keys(p).sort().map(k=>k+'='+p[k]).join('\n')+'#'+(s.history||[]).length};
+// 이 기기에 아직 내 기록이 없으면(예시 문장뿐) 클라우드 기록을 그대로 받아요
+const isFresh=s=>s.items.every(x=>x.sample)&&!Object.keys(s.diary).length&&!Object.keys(s.todos).length&&!s.history.length;
+
+const enc=str=>{const b=new TextEncoder().encode(str);let r='';for(let i=0;i<b.length;i+=0x8000)r+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000));return btoa(r)};
+const dec=b64=>new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g,'')),c=>c.charCodeAt(0)));
+function api(method,body,raw){
+  return fetch(`https://api.github.com/repos/${SYNC.repo}/contents/data.json`,{method,cache:'no-store',
+    headers:{Authorization:'Bearer '+SYNC.token,Accept:raw?'application/vnd.github.raw+json':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'},
+    body:body?JSON.stringify(body):undefined});
+}
+async function pull(){
+  const r=await api('GET');
+  if(r.status===404)return {data:null,sha:null};
+  if(!r.ok)throw new Error(String(r.status));
+  const j=await r.json();
+  let text=j.content?dec(j.content):'';
+  if(!text){const r2=await api('GET',null,true);if(!r2.ok)throw new Error(String(r2.status));text=await r2.text()}
+  return {data:JSON.parse(text),sha:j.sha};
+}
+async function push(sha){
+  const body={message:'기록 동기화 '+today()+' '+timeNow(),content:enc(JSON.stringify(S))};if(sha)body.sha=sha;
+  const r=await api('PUT',body);
+  if(r.status===409||r.status===422)return false; // 다른 기기가 방금 저장함 → 다시 받아서 합치기
+  if(!r.ok)throw new Error(String(r.status));
+  return true;
+}
+const syncMsg=e=>e.message==='401'?'토큰이 틀렸거나 만료됐어요':e.message==='403'?'토큰에 쓰기 권한이 없어요 (Contents: Read and write)':e.message==='404'?'기록 저장소를 찾을 수 없어요':'인터넷 연결을 확인하세요';
+async function syncNow(manual){
+  if(!syncOn())return;
+  if(syncing){syncAgain=true;return}
+  syncing=true;setSync('busy');
+  try{
+    let done=false;
+    for(let i=0;i<4&&!done;i++){
+      const {data,sha}=await pull();
+      const before=sig(S);
+      let next=S;
+      if(data){if(!data.stamp)data.stamp={};next=(!SYNC.joined&&isFresh(S))?data:merge(S,data)}
+      S=next;fix();snap=parts(S);
+      try{localStorage.setItem(KEY,JSON.stringify(S))}catch(_){}
+      if(!SYNC.joined){SYNC.joined=true;saveSync()}
+      done=(data&&sig(data)===sig(S))?true:await push(sha);
+      if(sig(S)!==before)softRender();
+    }
+    setSync(done?'ok':'err');
+    if(manual)toast(done?'동기화했어요 ☁️':'동기화 충돌 — 잠시 뒤 다시 해보세요');
+  }catch(e){setSync('err');SYNC.lastErr=syncMsg(e);if(manual)toast('동기화 실패: '+syncMsg(e))}
+  syncing=false;
+  if(syncAgain){syncAgain=false;syncNow()}
+}
+// 입력 중이거나 테스트 중이면 화면을 바로 바꾸지 않아요
+function softRender(){
+  if(T&&!T.done){renderLater=true;return}
+  const a=document.activeElement;if(a&&a.matches&&a.matches('input,textarea')){renderLater=true;return}
+  renderLater=false;render();
+}
+document.addEventListener('focusout',()=>{if(renderLater)setTimeout(()=>{const a=document.activeElement;if(!(a&&a.matches('input,textarea'))&&!(T&&!T.done)&&renderLater){renderLater=false;render()}},300)});
+function setSync(s){
+  syncState=s;
+  const m={off:['',''],wait:['⏳','저장 대기 중'],busy:['🔄','동기화 중'],ok:['☁️','모든 기기와 동기화됨'],err:['⚠️','동기화 실패'+(SYNC.lastErr?' — '+SYNC.lastErr:'')]}[s]||['',''];
+  const el=$('#sync');if(el){el.textContent=m[0];el.title=m[1]}
+  const st=$('#syst');if(st)st.textContent=m[1]?'· '+m[1]:'';
+}
+$('#sync').onclick=()=>{if(T&&!T.done)return;go('list');setTimeout(()=>$('#sycard')?.scrollIntoView({behavior:'smooth'}),50)};
+document.addEventListener('visibilitychange',()=>{
+  if(!syncOn())return;
+  if(document.visibilityState==='visible')syncNow();
+  else if(syncTimer){clearTimeout(syncTimer);syncTimer=null;syncNow()} // 앱을 닫기 전에 바로 올리기
+});
+setInterval(()=>{if(syncOn()&&document.visibilityState==='visible'&&!syncTimer)syncNow()},90000);
+
+function syncCard(){
+  if(syncOn())return `<div class="card" id="sycard"><h2>☁️ 기기 간 동기화</h2>
+    <div>연결됨: <b>${esc(SYNC.repo)}</b> <span class="muted" id="syst"></span></div>
+    <div class="muted" style="margin-top:4px">이 기기에서 저장하면 몇 초 뒤 자동으로 올라가고, 다른 기기에서 앱을 열거나 다시 볼 때 자동으로 받아와요.</div>
+    <div class="row" style="margin-top:10px"><button class="btn sm pri" id="synow">🔄 지금 동기화</button><button class="btn sm" id="syoff">이 기기 연결 끊기</button></div></div>`;
+  return `<div class="card" id="sycard"><h2>☁️ 기기 간 동기화</h2>
+    <div class="muted">컴퓨터·휴대폰 어디서 열어도 같은 기록을 보려면, 기록을 GitHub <b>비공개</b> 저장소에 저장해요. 기기마다 처음 한 번만 연결하면 돼요.</div>
+    <ol class="muted" style="padding-left:18px;margin:8px 0">
+      <li><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub 토큰 만들기</a> → Repository access: <b>Only select repositories</b> → <b>language-data</b></li>
+      <li>Permissions → Repository permissions → <b>Contents: Read and write</b></li>
+      <li>Generate token → 나온 토큰(github_pat_…)을 아래에 붙여넣기</li></ol>
+    <label class="f">기록 저장소</label><input type="text" id="syrepo" value="${esc(SYNC.repo||'shgudtn1-byte/language-data')}" autocapitalize="off" spellcheck="false">
+    <label class="f">토큰</label><input type="password" id="sytok" placeholder="github_pat_…" autocomplete="off">
+    <button class="btn pri" id="syon" style="margin-top:10px">연결하기</button>
+    <div class="muted" style="margin-top:8px">토큰은 이 기기 브라우저에만 저장돼요. 기록 저장소 하나만 쓸 수 있게 만들면 안전해요.</div></div>`;
+}
+function bindSyncCard(){
+  const on=$('#syon');
+  if(on)on.onclick=async()=>{
+    const repo=$('#syrepo').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\.git$|\/$/g,''),token=$('#sytok').value.trim();
+    if(!/^[\w.-]+\/[\w.-]+$/.test(repo)||!token)return toast('저장소와 토큰을 확인하세요');
+    on.disabled=true;on.textContent='확인 중…';
+    try{
+      const r=await fetch('https://api.github.com/repos/'+repo,{cache:'no-store',headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json'}});
+      if(r.status===401)throw new Error('토큰이 올바르지 않아요');
+      if(r.status===404||r.status===403)throw new Error('저장소를 찾을 수 없거나 토큰에 이 저장소 권한이 없어요');
+      if(!r.ok)throw new Error('GitHub 오류 '+r.status);
+      const j=await r.json();
+      if(!j.private&&!confirm('⚠️ 이 저장소는 공개 저장소예요. 일기가 누구에게나 보일 수 있어요. 그래도 연결할까요?'))throw new Error('연결을 취소했어요');
+      SYNC={repo,token,joined:false};SYNC.lastErr='';saveSync();
+      await syncNow(true);
+      if(syncState==='err'){const msg=SYNC.lastErr;SYNC={};saveSync();setSync('off');throw new Error(msg||'연결 실패')}
+      render();
+    }catch(e){toast(e.message);on.disabled=false;on.textContent='연결하기'}
+  };
+  const n=$('#synow');if(n)n.onclick=()=>syncNow(true);
+  const off=$('#syoff');if(off)off.onclick=()=>{if(!confirm('이 기기의 동기화 연결을 끊을까요? (이 기기와 클라우드의 기록은 지워지지 않아요)'))return;SYNC={};saveSync();setSync('off');render()};
+}
+
 if(location.hash==='#admin')tab='admin';
+snap=parts(S);
+setSync(syncOn()?'busy':'off');
 render();
+if(syncOn())syncNow();
 </script>
 </body>
 </html>
