@@ -90,6 +90,20 @@ label.f{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px}
 .tiles div{background:var(--bg);border-radius:10px;padding:10px;text-align:center}
 .tiles b{display:block;font-size:22px}
+.big-fr{font-size:28px;font-weight:700;line-height:1.35;margin:8px 0 4px;word-break:break-word}
+.dots{display:flex;gap:7px;justify-content:center;margin:12px 0 4px;flex-wrap:wrap}
+.dots i{width:14px;height:14px;border-radius:50%;background:var(--line)}
+.dots i.on{background:var(--good)}
+.dots i.cur{background:var(--accent);animation:pulse 1s infinite}
+@keyframes pulse{50%{transform:scale(1.35)}}
+.phase{text-align:center;font-size:20px;font-weight:700;padding:12px;border-radius:12px;margin:10px 0 6px}
+.phase.listen{background:var(--soft);color:var(--accent)}
+.phase.speak{background:var(--good-soft);color:var(--good)}
+.phase.again{background:var(--bad-soft);color:var(--bad)}
+.cd{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.cd i{display:block;height:100%;background:var(--good);width:0}
+.ctrl{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:12px}
+.ctrl button{padding:12px 2px;font-size:14px}
 .clamp{white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 </style>
 </head>
@@ -130,7 +144,8 @@ function seed(){
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&Array.isArray(d.items))return d}catch(e){}return seed()}
 function save(){if(typeof onSaved==='function')onSaved();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 let S=load();
-function fix(){S.todos=S.todos||{};S.diary=S.diary||{};S.history=S.history||[];S.settings=S.settings||{};S.wrong=S.wrong||{};S.log=S.log||{};S.stamp=S.stamp||{}}
+function fix(){S.todos=S.todos||{};S.diary=S.diary||{};S.history=S.history||[];S.settings=S.settings||{};S.wrong=S.wrong||{};S.log=S.log||{};S.stamp=S.stamp||{};S.speak=S.speak||{};
+  S.settings.sp=Object.assign({goalMin:60,goalReps:300,reps:5,pause:'mid',mode:(window.SpeechRecognition||window.webkitSpeechRecognition)?'mic':'auto',show:'text',scope:'least',slowFirst:true},S.settings.sp||{})}
 fix();
 
 // ---------- 유틸 ----------
@@ -291,13 +306,14 @@ document.addEventListener('click',e=>{
 
 // ---------- 내비 ----------
 let tab='home';
-const TABS=[['home','🏠','오늘'],['add','✏️','저장'],['test','📝','테스트'],['wrong','📕','오답노트'],['list','📚','목록']];
+const TABS=[['home','🏠','오늘'],['add','✏️','저장'],['speak','🎧','스피킹'],['test','📝','테스트'],['wrong','📕','오답노트'],['list','📚','목록']];
 function renderNav(){
   const wc=Object.keys(S.wrong).filter(byId).length;
   $('#nav').innerHTML=TABS.map(([k,i,l])=>`<button class="${tab===k?'on':''}" data-tab="${k}"><b>${i}</b><span>${l}${k==='wrong'&&wc?`<span class="badge">${wc}</span>`:''}</span></button>`).join('');
 }
 $('#nav').onclick=e=>{const b=e.target.closest('[data-tab]');if(!b)return;if(T&&!T.done&&!confirm('테스트를 그만둘까요? 지금까지 결과는 저장돼요.'))return;T=null;go(b.dataset.tab)};
 function go(t){
+  if(t!=='speak'&&typeof SP!=='undefined'&&SP)spEnd();
   if(t!=='admin'&&location.hash==='#admin'){try{history.replaceState(null,'',location.pathname+location.search)}catch(_){}}
   tab=t;render();scrollTo(0,0);
 }
@@ -305,7 +321,7 @@ function render(){
   const d=new Date();$('#sub').textContent=`${d.getMonth()+1}월 ${d.getDate()}일 · ${isMorning()?'좋은 아침이에요 ☀️':'오늘 하루 수고했어요 🌙'}`;
   renderNav();
   $('#adm').textContent=adminOk?'🔓 관리자':'🔒 관리자';
-  ({home:vHome,add:vAdd,test:vTest,wrong:vWrong,list:vList,admin:vAdmin})[tab]();
+  ({home:vHome,add:vAdd,speak:vSpeak,test:vTest,wrong:vWrong,list:vList,admin:vAdmin})[tab]();
   if(typeof setSync==='function'&&syncState)setSync(syncState);
 }
 
@@ -325,16 +341,18 @@ document.addEventListener('click',e=>{const p=e.target.closest('[data-say]');if(
 
 // ---------- 홈 ----------
 function streak(){
-  let n=0;for(let i=0;;i++){const l=S.log[daysAgo(i)];if(l&&(l.morning||l.evening))n++;else if(i===0)continue;else break}return n;
+  let n=0;for(let i=0;;i++){const l=S.log[daysAgo(i)],sp=S.speak[daysAgo(i)];if((l&&(l.morning||l.evening))||(sp&&sp.reps))n++;else if(i===0)continue;else break}return n;
 }
 function vHome(){
   const l=S.log[today()]||{};const added=S.items.filter(x=>x.added===today()).length;
   const wc=Object.keys(S.wrong).filter(byId).length;
   const step=(done,title,sub)=>`<div class="${done?'done':''}"><span class="dot">${done?'✓':''}</span><div><b>${title}</b><div class="muted">${sub}</div></div></div>`;
-  const next=!l.morning&&isMorning()?['morning','☀️ 아침 테스트 시작']:added===0&&!isMorning()?['add','✏️ 오늘 배운 것 저장하기']:!l.evening&&!isMorning()?['evening','🌙 저녁 테스트 시작']:wc?['wrong','📕 오답 복습하기']:['add','✏️ 새 문장 저장하기'];
+  const sp=spGet(),cs=S.settings.sp,spDone=sp.sec>=cs.goalMin*60&&sp.reps>=cs.goalReps;
+  const next=!l.morning&&isMorning()?['morning','☀️ 아침 테스트 시작']:!spDone?['speak',sp.sec?'🎧 스피킹 이어서 하기':'🎧 스피킹 시작하기']:added===0&&!isMorning()?['add','✏️ 오늘 배운 것 저장하기']:!l.evening&&!isMorning()?['evening','🌙 저녁 테스트 시작']:wc?['wrong','📕 오답 복습하기']:['add','✏️ 새 문장 저장하기'];
   $('#view').innerHTML=`
   <div class="card"><h2>오늘의 루틴</h2><div class="check">
     ${step(l.morning,'☀️ 아침 테스트',l.morning?`${l.morning.score}/${l.morning.total} 맞음`:'일어나서 어제까지 배운 것 확인')}
+    ${step(spDone,'🎧 스피킹 '+(cs.goalMin%60?cs.goalMin+'분':cs.goalMin/60+'시간'),`${Math.floor(sp.sec/60)}/${cs.goalMin}분 · ${sp.reps}/${cs.goalReps}회 듣고 따라 말하기`)}
     ${step(added>0,'✏️ 오늘 배운 것 저장',added?`${added}개 저장함`:'자기 전에 오늘 배운 단어·문장 기록')}
     ${step(l.evening,'🌙 저녁 테스트',l.evening?`${l.evening.score}/${l.evening.total} 맞음`:'자기 전에 한 번 더')}
   </div>
@@ -345,7 +363,7 @@ function vHome(){
     <div><b style="color:var(--bad)">${wc}</b><span class="muted">오답노트</span></div>
   </div>
   ${S.items.some(x=>x.sample)?`<div class="card muted">💡 지금은 예시 문장(코트디부아르 생활 표현)이 들어 있어요. 목록 탭에서 지울 수 있어요.</div>`:''}`;
-  $('#next').onclick=()=>{const k=next[0];if(k==='morning'||k==='evening'){setup.session=k;startTest()}else if(k==='wrong'){go('wrong')}else go('add')};
+  $('#next').onclick=()=>{const k=next[0];if(k==='morning'||k==='evening'){setup.session=k;startTest()}else if(k==='wrong'||k==='speak'){go(k)}else go('add')};
 }
 
 // ---------- 저장 ----------
@@ -392,7 +410,7 @@ function vAdd(){
 function itemRow(x){
   const w=S.wrong[x.id];
   return `<div class="item">${thumb(x)}
-  <div class="t"><div class="fr">${esc(x.fr)}<span class="tag">${x.kind}</span>${w?`<span class="tag" style="color:var(--bad)">✗${w.count}</span>`:''}</div><div class="muted">${esc(x.ko)} · ${x.added.slice(5).replace('-','/')}</div></div>
+  <div class="t"><div class="fr">${esc(x.fr)}<span class="tag">${x.kind}</span>${saidTotal(x.id)?`<span class="tag">🗣️${saidTotal(x.id)}</span>`:''}${w?`<span class="tag" style="color:var(--bad)">✗${w.count}</span>`:''}</div><div class="muted">${esc(x.ko)} · ${x.added.slice(5).replace('-','/')}</div></div>
   <button class="ib" data-say="${esc(x.fr)}" title="듣기">🔊</button><button class="ib" data-del="${x.id}" title="삭제">🗑️</button></div>`;
 }
 function bindRows(){
@@ -658,7 +676,8 @@ function routineHtml(d){
   const l=S.log[d]||{},n=S.items.filter(x=>x.added===d).length,off='opacity:.4';
   return `<span class="tag" style="${l.morning?'':off}">☀️ ${l.morning?l.morning.score+'/'+l.morning.total:'-'}</span>`
     +`<span class="tag" style="${n?'':off}">✏️ ${n}개</span>`
-    +`<span class="tag" style="${l.evening?'':off}">🌙 ${l.evening?l.evening.score+'/'+l.evening.total:'-'}</span>`;
+    +`<span class="tag" style="${l.evening?'':off}">🌙 ${l.evening?l.evening.score+'/'+l.evening.total:'-'}</span>`
+    +`<span class="tag" style="${S.speak[d]?.sec?'':off}">🎧 ${Math.floor((S.speak[d]?.sec||0)/60)}분 · ${S.speak[d]?.reps||0}회</span>`;
 }
 
 function vAdmin(){
@@ -719,6 +738,13 @@ function aDay(){
     <label class="f">불어로 한 줄 일기 (선택)</label>
     <div class="row"><input type="text" id="dfr" data-fr value="${esc(di.fr)}" placeholder="Aujourd'hui, j'ai appris…" style="flex:1"><button class="ib" id="dsay" title="듣기">🔊</button></div>${accBar()}
     <div class="row" style="margin-top:10px;justify-content:space-between"><span class="muted" id="dsv">${di.updated?'저장됨 · '+esc(di.updated):''}</span><button class="btn pri" id="dsave">일기 저장</button></div>
+  </div>
+
+  <div class="card"><h2>🎧 스피킹</h2>
+    ${(()=>{const sp=S.speak[d];if(!sp||!(sp.sec||sp.reps))return '<div class="muted">스피킹 기록이 없어요.</div>';
+      const cs=S.settings.sp;
+      return `<div><b>${Math.floor(sp.sec/60)}분 ${sp.sec%60}초</b> · <b>${sp.reps}회</b> 따라 말함 ${sp.sec>=cs.goalMin*60&&sp.reps>=cs.goalReps?'<span class="tag" style="color:var(--good)">목표 달성</span>':''}</div>`
+        +Object.entries(sp.by||{}).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([id,n])=>{const it=byId(id);return it?`<div class="muted" style="margin-top:4px">🗣️ ${n}번 · ${esc(it.fr)}</div>`:''}).join('')})()}
   </div>
 
   <div class="card"><h2>📚 이날의 공부</h2>
@@ -797,6 +823,9 @@ function aStats(){
     <div><b>${studyDays}</b><span class="muted">테스트 본 날</span></div>
     <div><b>${S.items.length}</b><span class="muted">저장한 표현</span></div>
     <div><b>${runs.length}</b><span class="muted">테스트 횟수</span></div>
+    <div><b>${(()=>{const s=Object.values(S.speak).reduce((a,x)=>a+(x.sec||0),0);return s>=3600?Math.floor(s/3600)+'시간 '+Math.floor(s%3600/60)+'분':Math.floor(s/60)+'분'})()}</b><span class="muted">총 스피킹 시간</span></div>
+    <div><b>${Object.values(S.speak).reduce((a,x)=>a+(x.reps||0),0)}</b><span class="muted">총 따라 말한 횟수</span></div>
+    <div><b>${Object.values(S.speak).filter(x=>x.sec>=S.settings.sp.goalMin*60&&x.reps>=S.settings.sp.goalReps).length}</b><span class="muted">스피킹 목표 달성일</span></div>
     <div><b>${tot?Math.round(ok/tot*100)+'%':'-'}</b><span class="muted">평균 정답률</span></div>
     <div><b>${allT.filter(t=>t.done).length}/${allT.length}</b><span class="muted">할 일 완료</span></div>
     <div><b>${diaryN}</b><span class="muted">일기 쓴 날</span></div>
@@ -805,8 +834,8 @@ function aStats(){
   <div class="card"><h2>최근 2주</h2>
     <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">${last.map(d=>{const l=S.log[d]||{},di=S.diary[d]||{};
       return `<div data-day="${d}" style="cursor:pointer;background:var(--bg);border-radius:10px;padding:6px 2px;text-align:center;font-size:12px;${d===today()?'outline:2px solid var(--accent)':''}">
-        <div class="muted">${+d.slice(5,7)}/${+d.slice(8)}</div><div style="font-size:18px;min-height:24px">${di.mood||''}</div><div>${l.morning?'☀️':'·'}${l.evening?'🌙':'·'}</div></div>`}).join('')}</div>
-    <div class="muted" style="margin-top:8px">☀️ 아침 테스트 · 🌙 저녁 테스트 · 얼굴은 그날 기분. 누르면 그날 기록이 열려요.</div>
+        <div class="muted">${+d.slice(5,7)}/${+d.slice(8)}</div><div style="font-size:18px;min-height:24px">${di.mood||''}</div><div>${l.morning?'☀️':'·'}${l.evening?'🌙':'·'}${S.speak[d]?.sec>=S.settings.sp.goalMin*60&&S.speak[d]?.reps>=S.settings.sp.goalReps?'🎧':S.speak[d]?.reps?'🗣️':'·'}</div></div>`}).join('')}</div>
+    <div class="muted" style="margin-top:8px">☀️ 아침 테스트 · 🌙 저녁 테스트 · 🎧 스피킹 목표 달성 (🗣️ 조금 함) · 얼굴은 그날 기분. 누르면 그날 기록이 열려요.</div>
   </div>
   <div class="card"><h2>가장 많이 틀린 표현</h2>${topW.map(x=>itemRow(x).replace(/<button class="ib" data-del[^>]*>🗑️<\/button>/,'')+`<div class="muted" style="font-size:12px;margin:-6px 0 6px 56px">${x.wrong}번 틀림 · ${x.right}번 맞음</div>`).join('')||'<div class="muted">아직 없어요.</div>'}</div>`;
   document.querySelectorAll('[data-day]').forEach(c=>c.onclick=()=>openDay(c.dataset.day));
@@ -838,6 +867,219 @@ function aSet(){
   $('#ax').onclick=exportData;
 }
 
+// ---------- 🎧 스피킹 1시간: 듣고 → 따라 말하고 → 듣고 → 따라 말하고 ----------
+var SP=null,spTick=null,wakeLock=null;
+const PAUSE={short:1.0,mid:1.5,long:2.2};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const spGet=(d=today())=>S.speak[d]||{sec:0,reps:0,by:{}};
+const spDay=(d=today())=>S.speak[d]||(S.speak[d]={sec:0,reps:0,by:{}});
+function saidTotal(id){let n=0;for(const d in S.speak)n+=((S.speak[d].by||{})[id]||0);return n}
+const mmss=s=>Math.floor(s/60)+':'+pad(s%60);
+
+// 소리 재생이 끝날 때까지 기다리고, 걸린 시간을 돌려줘요 (따라 말할 시간 계산용)
+function speakP(text,slow){
+  return new Promise(res=>{
+    const t0=Date.now();
+    if(!hasTTS){setTimeout(()=>res(1500),1500);return}
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text);u.lang='fr-FR';
+    const v=voices.find(v=>v.name===S.settings.voice)||voices.find(v=>/fr[-_]CI/i.test(v.lang))||voices.find(v=>/fr[-_]FR/i.test(v.lang))||voices[0];
+    if(v){u.voice=v;u.lang=v.lang}
+    u.rate=slow?0.6:S.settings.rate;
+    let done=false;
+    const fin=()=>{if(done)return;done=true;clearTimeout(t);res(Math.max(800,Date.now()-t0))};
+    u.onend=fin;u.onerror=fin;
+    const t=setTimeout(fin,text.length*(slow?170:110)+4000);
+    speechSynthesis.speak(u);
+  });
+}
+// 내 목소리를 듣고 문장과 얼마나 비슷한지 확인해요
+function listenFor(target,ms){
+  return new Promise(res=>{
+    let best='',done=false,rec,t;
+    const fin=()=>{
+      if(done)return;done=true;clearTimeout(t);try{rec&&rec.abort()}catch(_){}
+      if(SP)SP.rec=null;
+      const sim=similarity(best,target);res({heard:best,sim,ok:sim>=0.5});
+    };
+    try{rec=new SR()}catch(_){res({heard:'',sim:0,ok:true});return}
+    rec.lang='fr-FR';rec.interimResults=true;rec.maxAlternatives=1;
+    rec.onresult=e=>{
+      best=Array.from(e.results).map(r=>r[0].transcript).join(' ').trim();
+      if(SP)SP.heard=best;const h=$('#spheard');if(h)h.textContent='들린 말: '+best;
+      if(e.results[e.results.length-1].isFinal)setTimeout(fin,150);
+    };
+    rec.onerror=e=>{if(e.error==='not-allowed'||e.error==='service-not-allowed'||e.error==='audio-capture'){if(SP)SP.micDenied=true}fin()};
+    rec.onend=fin;
+    t=setTimeout(fin,ms);
+    if(SP)SP.rec=rec;
+    try{rec.start()}catch(_){fin()}
+  });
+}
+function waitOrSkip(ms){return new Promise(res=>{const t=setTimeout(res,ms);if(SP)SP.wake=()=>{clearTimeout(t);res()}})}
+function spCountdown(ms){
+  const i=$('#spcd');if(!i)return;
+  i.style.transition='none';i.style.width='0';
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{i.style.transition=`width ${ms}ms linear`;i.style.width='100%'}));
+}
+function spQueue(){
+  const c=S.settings.sp;let list=S.items.slice();
+  if(c.scope==='today')list=list.filter(x=>x.added===today());
+  else if(c.scope==='week')list=list.filter(x=>x.added>=daysAgo(6));
+  else if(c.scope==='wrong')list=list.filter(x=>S.wrong[x.id]);
+  list=shuffle(list);
+  // 적게 말한 것부터 (오답노트에 있는 건 더 앞으로)
+  if(c.scope==='least'){const score=x=>saidTotal(x.id)-(S.wrong[x.id]?50:0);list.sort((a,b)=>score(a)-score(b))}
+  return list.map(x=>x.id);
+}
+function spCount(id){
+  const d=spDay();d.reps++;d.by=d.by||{};d.by[id]=(d.by[id]||0)+1;
+  save();spGoalCheck();
+}
+function spGoalCheck(){
+  const d=spGet(),c=S.settings.sp;
+  if(SP&&!SP.celebrated&&d.sec>=c.goalMin*60&&d.reps>=c.goalReps){SP.celebrated=true;toast('🎉 오늘 스피킹 분량 완료! Bravo !')}
+}
+function spSecond(){
+  if(!(SP&&SP.running&&document.visibilityState==='visible'))return;
+  const d=spDay(),c=S.settings.sp;d.sec++;
+  if(d.sec%20===0)save();
+  const t=$('#sptime');if(t)t.textContent=mmss(d.sec);
+  const b=$('#spbar');if(b)b.style.width=Math.min(100,d.sec/(c.goalMin*60)*100)+'%';
+  spGoalCheck();
+}
+function spAdvance(){SP.rep=0;SP.qi++;if(SP.qi>=SP.queue.length){SP.queue=spQueue();SP.qi=0}}
+function spInterrupt(){
+  if(!SP)return;SP.token=(SP.token||0)+1;
+  if(hasTTS)speechSynthesis.cancel();
+  try{SP.rec&&SP.rec.abort()}catch(_){}
+  SP.wake&&SP.wake();
+}
+async function spLoop(){
+  const my=SP.token=(SP.token||0)+1;
+  const alive=()=>SP&&SP.running&&SP.token===my;
+  while(alive()){
+    const it=byId(SP.queue[SP.qi]);
+    if(!it){spAdvance();if(!SP.queue.length){spEnd();render();return}continue}
+    const c=S.settings.sp;
+    SP.phase='listen';SP.heard='';SP.sim=null;spDraw();
+    const dur=await speakP(it.fr,c.slowFirst&&SP.rep===0);
+    if(!alive())return;
+    SP.phase='speak';spDraw();
+    const wait=Math.round(Math.max(2200,dur*PAUSE[c.pause]+700));
+    spCountdown(wait);
+    let r;
+    if(c.mode==='mic'&&SR&&!SP.micDenied)r=await listenFor(it.fr,wait+1500);
+    else{await waitOrSkip(wait);r={ok:true,heard:''}}
+    if(!alive())return;
+    if(SP.micDenied&&c.mode==='mic'){c.mode='auto';save();toast('마이크를 쓸 수 없어서 ⏱️ 자동 진행으로 바꿨어요');r.ok=true}
+    if(SP.manual){SP.manual=false;r.ok=true}
+    SP.sim=r.sim;
+    if(r.ok){spCount(it.id);SP.rep++;SP.phase='good'}else SP.phase='again';
+    spDraw();
+    await sleep(r.ok?450:1000);
+    if(!alive())return;
+    if(SP.rep>=c.reps)spAdvance();
+  }
+}
+async function spStart(){
+  const q=spQueue();
+  if(!q.length){toast('연습할 표현이 없어요. "연습할 문장" 범위를 바꿔보세요');return}
+  SP={queue:q,qi:0,rep:0,running:true,phase:'listen',heard:'',celebrated:false};
+  const d=spGet(),c=S.settings.sp;if(d.sec>=c.goalMin*60&&d.reps>=c.goalReps)SP.celebrated=true;
+  try{wakeLock=await navigator.wakeLock?.request('screen')}catch(_){} // 화면 꺼짐 방지
+  if(!spTick)spTick=setInterval(spSecond,1000);
+  spDraw();spLoop();
+}
+function spEnd(){
+  if(!SP)return;
+  SP.running=false;spInterrupt();SP=null;save();
+  try{wakeLock&&wakeLock.release()}catch(_){}wakeLock=null;
+}
+function spToggle(){
+  if(!SP)return;
+  if(SP.running){SP.running=false;spInterrupt();save();spDraw()}
+  else{SP.running=true;spDraw();spLoop()}
+}
+function spManual(){if(SP&&SP.running&&SP.phase==='speak'){SP.manual=true;try{SP.rec&&SP.rec.abort()}catch(_){}SP.wake&&SP.wake()}}
+function spSkip(){if(!SP)return;spInterrupt();spAdvance();if(SP.running)spLoop();else spDraw()}
+document.addEventListener('keydown',e=>{
+  if(tab!=='speak'||!SP||(e.target.matches&&e.target.matches('input,textarea')))return;
+  if(e.code==='Space'){e.preventDefault();spToggle()}
+  else if(e.key==='Enter'){e.preventDefault();spManual()}
+  else if(e.key==='ArrowRight'){e.preventDefault();spSkip()}
+});
+document.addEventListener('visibilitychange',async()=>{if(document.visibilityState==='visible'&&SP&&!wakeLock){try{wakeLock=await navigator.wakeLock?.request('screen')}catch(_){}}});
+
+function spDraw(){
+  if(tab!=='speak'||!SP)return;
+  const it=byId(SP.queue[SP.qi]);if(!it)return;
+  const c=S.settings.sp,d=spGet(),im=imgOf(it);
+  const reveal=c.show==='text'||SP.rep>0||SP.phase==='good'||SP.phase==='again';
+  const ph=!SP.running?['listen','⏸ 일시정지 — ▶️ 계속을 누르세요']
+    :{listen:['listen',SP.rep===0&&c.slowFirst?'🔊 잘 들으세요 (천천히)':'🔊 잘 들으세요'],speak:['speak',c.mode==='mic'&&SR?'🗣️ 따라 말하세요! (듣고 있어요)':'🗣️ 따라 말하세요!'],
+      good:['speak','✓ 좋아요'+(SP.sim!=null&&c.mode==='mic'?` · ${Math.round(SP.sim*100)}% 일치`:'')],again:['again','🔁 다시 한 번! 조금 더 크게']}[SP.phase];
+  $('#view').innerHTML=`
+  <div class="card">
+    <div class="row" style="justify-content:space-between"><span>⏱️ <b id="sptime">${mmss(d.sec)}</b> / ${c.goalMin}:00</span><span>🗣️ <b id="spreps">${d.reps}</b> / ${c.goalReps}회</span></div>
+    <div class="bar" style="margin:6px 0 4px"><i id="spbar" style="width:${Math.min(100,d.sec/(c.goalMin*60)*100)}%;background:var(--good)"></i></div>
+    ${picHtml(im,'m')}
+    <div class="big-fr" style="text-align:center">${reveal?esc(it.fr):'👂 · · ·'}</div>
+    <div class="muted" style="text-align:center">${reveal?esc(it.ko):'문장은 숨겨져 있어요. 소리만 듣고 따라 해보세요'}</div>
+    <div class="dots">${Array.from({length:c.reps},(_,i)=>`<i class="${i<SP.rep?'on':i===SP.rep?'cur':''}"></i>`).join('')}</div>
+    <div class="phase ${ph[0]}">${ph[1]}</div>
+    <div class="cd"><i id="spcd"></i></div>
+    <div class="muted" id="spheard" style="text-align:center;min-height:22px;margin-top:6px">${SP.heard?'들린 말: '+esc(SP.heard):''}</div>
+    <div class="muted" style="text-align:center;font-size:13px">이 표현 총 <b>${saidTotal(it.id)}</b>번 말함 · 오늘 ${(d.by||{})[it.id]||0}번</div>
+    <div class="ctrl">
+      <button class="btn" id="sppause">${SP.running?'⏸ 멈춤':'▶️ 계속'}</button>
+      <button class="btn" id="spcount" ${SP.running&&SP.phase==='speak'?'':'disabled'}>✋ 말했어요</button>
+      <button class="btn" id="spnext">⏭ 다음</button>
+      <button class="btn" id="spstop">■ 끝내기</button>
+    </div>
+    <div class="muted" style="text-align:center;margin-top:8px;font-size:12px">키보드: Space 멈춤/계속 · Enter 말했어요 · → 다음 문장</div>
+  </div>`;
+  $('#sppause').onclick=spToggle;$('#spcount').onclick=spManual;$('#spnext').onclick=spSkip;
+  $('#spstop').onclick=()=>{spEnd();render()};
+}
+
+function vSpeak(){
+  if(SP)return spDraw();
+  const c=S.settings.sp,d=spGet(),pm=Math.min(1,d.sec/(c.goalMin*60)),pr=Math.min(1,d.reps/c.goalReps);
+  const top=S.items.map(x=>[x,saidTotal(x.id)]).filter(a=>a[1]).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  $('#view').innerHTML=`
+  <div class="card"><h2>🎧 오늘의 스피킹 분량</h2>
+    <div class="row" style="justify-content:space-between"><span>⏱️ 말하기 시간</span><b>${Math.floor(d.sec/60)} / ${c.goalMin}분</b></div>
+    <div class="bar" style="margin:6px 0 12px"><i style="width:${pm*100}%;background:var(--good)"></i></div>
+    <div class="row" style="justify-content:space-between"><span>🗣️ 따라 말한 횟수</span><b>${d.reps} / ${c.goalReps}회</b></div>
+    <div class="bar" style="margin:6px 0 8px"><i style="width:${pr*100}%"></i></div>
+    ${pm>=1&&pr>=1?'<div style="text-align:center;font-weight:700;color:var(--good)">🎉 오늘 분량 완료! Bravo !</div>'
+      :`<div class="muted">남은 분량: ${Math.max(0,c.goalMin-Math.floor(d.sec/60))}분 · ${Math.max(0,c.goalReps-d.reps)}회 — 두 개 다 채워야 오늘 끝!</div>`}
+    <div style="margin-top:14px"><button class="btn pri big" id="spgo">🎧 이어폰 끼고 ${d.sec?'이어서 하기':'시작하기'}</button></div>
+    <div class="muted" style="margin-top:8px;text-align:center">🔊 듣고 → 🗣️ 따라 말하고 → 🔊 듣고 → 🗣️ 따라 말하고… 문장마다 ${c.reps}번씩, 시간은 실제로 훈련한 시간만 쌓여요</div>
+  </div>
+  <div class="card"><h2>훈련 설정</h2>
+    <label class="f">연습할 문장</label><div class="seg" data-k="scope"><button data-v="least">적게 말한 것</button><button data-v="today">오늘</button><button data-v="week">7일</button><button data-v="wrong">오답</button><button data-v="all">전체</button></div>
+    <label class="f">문장당 반복</label><div class="seg" data-k="reps"><button data-v="3">3번</button><button data-v="5">5번</button><button data-v="10">10번</button></div>
+    <label class="f">따라 말할 시간</label><div class="seg" data-k="pause"><button data-v="short">짧게</button><button data-v="mid">보통</button><button data-v="long">길게</button></div>
+    <label class="f">횟수 세기</label><div class="seg" data-k="mode"><button data-v="mic" ${SR?'':'disabled'}>🎤 내 목소리 인식</button><button data-v="auto">⏱️ 자동 진행</button></div>
+    <div class="muted" style="font-size:13px;margin-top:4px">${SR?'🎤: 실제로 말해야 1회로 세요 (50% 이상 비슷하면 통과). ⏱️: 따라 말할 시간이 지나면 1회로 세요.':'이 브라우저는 음성 인식이 안 돼서 ⏱️ 자동 진행만 돼요 (Chrome 추천).'}</div>
+    <label class="f">화면</label><div class="seg" data-k="show"><button data-v="text">문장 보면서</button><button data-v="hide">듣고만 (말한 뒤 보기)</button></div>
+    <div class="opts" style="margin-top:10px"><label><input type="checkbox" id="spslow" ${c.slowFirst?'checked':''}><span><b>첫 번째는 천천히 들려주기</b><small>문장마다 처음 한 번은 느린 속도로 들려줘요</small></span></label></div>
+    <label class="f">하루 목표 시간</label><div class="seg" data-k="goalMin"><button data-v="30">30분</button><button data-v="45">45분</button><button data-v="60">1시간</button><button data-v="90">1시간 반</button></div>
+    <label class="f">하루 목표 횟수</label><div class="seg" data-k="goalReps"><button data-v="200">200회</button><button data-v="300">300회</button><button data-v="500">500회</button><button data-v="800">800회</button></div>
+  </div>
+  <div class="card"><h2>많이 말한 표현 🗣️</h2>
+    ${top.length?top.map(([x,n])=>`<div class="item">${thumb(x)}<div class="t"><div class="fr">${esc(x.fr)}</div><div class="muted">${esc(x.ko)}</div></div><b>${n}번</b></div>`).join(''):'<div class="muted">아직 없어요. 시작하면 표현마다 몇 번 말했는지 쌓여요.</div>'}
+  </div>`;
+  const NUM=new Set(['reps','goalMin','goalReps']);
+  const sync=()=>document.querySelectorAll('.seg[data-k]').forEach(s=>s.querySelectorAll('button').forEach(b=>b.classList.toggle('on',String(c[s.dataset.k])===b.dataset.v)));
+  document.querySelectorAll('.seg[data-k]').forEach(s=>s.onclick=e=>{const b=e.target.closest('button');if(!b||b.disabled)return;const k=s.dataset.k;c[k]=NUM.has(k)?+b.dataset.v:b.dataset.v;save();if(k==='goalMin'||k==='goalReps')vSpeak();else sync()});
+  $('#spslow').onchange=e=>{c.slowFirst=e.target.checked;save()};
+  $('#spgo').onclick=spStart;
+  sync();
+}
+
 // ---------- ☁️ 기기 간 동기화 (GitHub 비공개 저장소의 data.json) ----------
 // 기록을 작은 조각(표현 1개, 하루 할 일, 하루 일기…)으로 나눠 조각마다 마지막 수정 시각을 기억하고,
 // 두 기기의 기록을 합칠 때 조각별로 더 최근 것을 골라요. 그래서 다른 기기에서 쓴 내용이 서로 덮어써지지 않아요.
@@ -853,6 +1095,7 @@ function parts(s){
   for(const d in s.todos||{})p['todos:'+d]=JSON.stringify(s.todos[d]);
   for(const d in s.diary||{})p['diary:'+d]=JSON.stringify(s.diary[d]);
   for(const d in s.log||{})p['log:'+d]=JSON.stringify(s.log[d]);
+  for(const d in s.speak||{})p['speak:'+d]=JSON.stringify(s.speak[d]);
   p.wrong=JSON.stringify(s.wrong||{});p.settings=JSON.stringify(s.settings||{});
   return p;
 }
@@ -863,15 +1106,19 @@ function stampChanges(){
 }
 function onSaved(){
   stampChanges();
-  if(syncOn()){clearTimeout(syncTimer);setSync('wait');syncTimer=setTimeout(()=>{syncTimer=null;syncNow()},4000)}
+  if(!syncOn())return;
+  const drilling=typeof SP!=='undefined'&&SP&&SP.running;
+  if(drilling&&syncTimer)return; // 스피킹 중에는 1분에 한 번만 올려요
+  clearTimeout(syncTimer);setSync('wait');
+  syncTimer=setTimeout(()=>{syncTimer=null;syncNow()},drilling?60000:4000);
 }
 function rebuild(p,base){
-  const s={...base,items:[],todos:{},diary:{},log:{},wrong:{},settings:{}};
+  const s={...base,items:[],todos:{},diary:{},log:{},speak:{},wrong:{},settings:{}};
   for(const k in p){
     const v=JSON.parse(p[k]);
     if(k==='wrong'){s.wrong=v;continue}if(k==='settings'){s.settings=v;continue}
     const i=k.indexOf(':'),t=k.slice(0,i),id=k.slice(i+1);
-    if(t==='item')s.items.push(v);else if(t==='todos')s.todos[id]=v;else if(t==='diary')s.diary[id]=v;else if(t==='log')s.log[id]=v;
+    if(t==='item')s.items.push(v);else if(t==='todos')s.todos[id]=v;else if(t==='diary')s.diary[id]=v;else if(t==='log')s.log[id]=v;else if(t==='speak')s.speak[id]=v;
   }
   s.items.sort((a,b)=>a.added<b.added?-1:a.added>b.added?1:0);
   return s;
@@ -892,7 +1139,7 @@ function merge(L,R){
 }
 const sig=s=>{const p=parts(s);return Object.keys(p).sort().map(k=>k+'='+p[k]).join('\n')+'#'+(s.history||[]).length};
 // 이 기기에 아직 내 기록이 없으면(예시 문장뿐) 클라우드 기록을 그대로 받아요
-const isFresh=s=>s.items.every(x=>x.sample)&&!Object.keys(s.diary).length&&!Object.keys(s.todos).length&&!s.history.length;
+const isFresh=s=>s.items.every(x=>x.sample)&&!Object.keys(s.diary).length&&!Object.keys(s.todos).length&&!s.history.length&&!Object.keys(s.speak||{}).length;
 
 const enc=str=>{const b=new TextEncoder().encode(str);let r='';for(let i=0;i<b.length;i+=0x8000)r+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000));return btoa(r)};
 const dec=b64=>new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g,'')),c=>c.charCodeAt(0)));
@@ -943,7 +1190,7 @@ async function syncNow(manual){
 }
 // 입력 중이거나 테스트 중이면 화면을 바로 바꾸지 않아요
 function softRender(){
-  if(T&&!T.done){renderLater=true;return}
+  if((T&&!T.done)||(typeof SP!=='undefined'&&SP)){renderLater=true;return}
   const a=document.activeElement;if(a&&a.matches&&a.matches('input,textarea')){renderLater=true;return}
   renderLater=false;render();
 }
