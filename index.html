@@ -98,6 +98,8 @@ label.f{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
 .grid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;cursor:pointer;border:3px solid transparent;background:var(--bg)}
 .grid img:hover{border-color:var(--accent)}
 .adm{margin-left:8px;font-size:13px;color:var(--muted);text-decoration:none;border:1px solid var(--line);padding:5px 10px;border-radius:16px;white-space:nowrap;background:var(--card)}
+@media(max-width:420px){.adm{margin-left:4px;padding:4px 8px;font-size:12px}h1{font-size:18px;white-space:nowrap}}
+.ovl{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:30;padding:16px;overflow:auto}
 .adm:hover{border-color:var(--accent);color:var(--accent)}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px}
 .tiles div{background:var(--bg);border-radius:10px;padding:10px;text-align:center}
@@ -125,7 +127,7 @@ label.f{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
 </head>
 <body>
 <div class="wrap">
-  <header><div class="flag"><i></i><i></i><i></i></div><div><h1>매일 불어 테스트</h1><div class="muted" id="sub"></div></div><span id="sync" style="margin-left:auto;font-size:18px;cursor:pointer"></span><a href="#admin" class="adm" id="adm">🔒 관리자</a></header>
+  <header><div class="flag"><i></i><i></i><i></i></div><div><h1>매일 불어 테스트</h1><div class="muted" id="sub"></div></div><span id="sync" style="margin-left:auto;font-size:18px;cursor:pointer"></span><button class="adm" id="prof" style="cursor:pointer;font:inherit;font-size:13px"></button><a href="#admin" class="adm" id="adm">🔒 관리자</a></header>
   <div id="inapp" class="card" style="display:none;border-color:var(--accent);background:var(--soft)"></div>
   <main id="view"></main>
 </div>
@@ -134,7 +136,20 @@ label.f{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
 
 <script>
 // ---------- 저장소 ----------
-const KEY='frstudy.v1';
+// 👤 사람마다 기록을 따로 보관해요 (노형수 = 원래 기록, 백은정 = 새 공간)
+const PROFS=[{c:'noh',n:'노형수',e:'👨'},{c:'baek',n:'백은정',e:'👩'}];
+const PK='frstudy.profile';
+const lsGet=k=>{try{return localStorage.getItem(k)}catch(_){return null}};
+let PROF=lsGet(PK);
+const profFirst=!PROF&&!lsGet('frstudy.v1'); // 처음 여는 기기면 누가 쓰는지 물어봐요
+if(!PROFS.some(p=>p.c===PROF)){PROF='noh';if(!profFirst)try{localStorage.setItem(PK,PROF)}catch(_){}}
+const ME=PROFS.find(p=>p.c===PROF);
+const KEY=PROF==='noh'?'frstudy.v1':'frstudy.v1.'+PROF;
+const DATAFILE=PROF==='noh'?'data.json':'data-'+PROF+'.json';
+const JK=PROF==='noh'?'joined':'joined_'+PROF;
+// '정관사 + 단어 하나'는 단어, 띄어쓴 말이 있으면 문장
+const ARTRE=/^(le|la|les|l['’]|un|une|des)\s*/i;
+const kindOf=f=>f.trim().replace(ARTRE,'').trim().includes(' ')?'문장':'단어';
 const pad=n=>String(n).padStart(2,'0');
 const dstr=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const today=()=>dstr(new Date());
@@ -143,7 +158,7 @@ const uid=()=>Math.random().toString(36).slice(2,10);
 
 function seed(){
   const y=daysAgo(1), t=today();
-  const mk=(fr,ko,added,e)=>({id:uid(),fr,ko,kind:fr.trim().includes(' ')?'문장':'단어',added,right:0,wrong:0,sample:true,img:{t:'emoji',v:e}});
+  const mk=(fr,ko,added,e)=>({id:uid(),fr,ko,kind:kindOf(fr),added,right:0,wrong:0,sample:true,img:{t:'emoji',v:e}});
   return {
     items:[
       mk('Bonne arrivée !','잘 오셨어요! (도착 환영 인사)',y,'🤗🧳🏠'),
@@ -161,7 +176,7 @@ function seed(){
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&Array.isArray(d.items))return d}catch(e){}return seed()}
 function save(){if(typeof onSaved==='function')onSaved();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 let S=load();
-function fix(){S.todos=S.todos||{};S.diary=S.diary||{};S.history=S.history||[];S.settings=S.settings||{};S.wrong=S.wrong||{};S.log=S.log||{};S.stamp=S.stamp||{};S.speak=S.speak||{};
+function fix(){S.items.forEach(x=>{if(!x.pack&&!/^p[swgc]\d{3}$/.test(x.id))x.kind=kindOf(x.fr)});S.todos=S.todos||{};S.diary=S.diary||{};S.history=S.history||[];S.settings=S.settings||{};S.wrong=S.wrong||{};S.log=S.log||{};S.stamp=S.stamp||{};S.speak=S.speak||{};
   S.settings.sp=Object.assign({goalMin:60,goalReps:300,reps:5,pause:'mid',mode:(window.SpeechRecognition||window.webkitSpeechRecognition)?'mic':'auto',show:'text',scope:'least',slowFirst:true,pk:'s',cat:'👋 인사'},S.settings.sp||{})}
 fix();
 
@@ -402,8 +417,10 @@ function vAdd(){
     <label class="f">불어 (단어 또는 문장)</label>
     <textarea id="fr" data-fr placeholder="예: Je suis coréen et j'habite à Abidjan."></textarea>
     ${accBar()}
-    <label class="f">한국어 뜻</label>
+    <div id="art"></div>
+    <label class="f">한국어 뜻 <span class="muted" style="font-size:12px">(불어를 쓰면 자동으로 찾아줘요)</span></label>
     <input type="text" id="ko" placeholder="예: 나는 한국 사람이고 아비장에 살아요.">
+    <div id="kosug"></div>
     <label class="f">기억용 그림 (자동 추천 · 눌러서 사진으로 바꾸기)</label>
     <div class="row"><div id="pp" style="width:120px"></div><button class="btn sm" id="pick">🖼️ 그림 / 사진 바꾸기</button></div>
     <div class="row" style="margin-top:14px">
@@ -419,13 +436,16 @@ function vAdd(){
   const prev=()=>{const im=draftImg?(draftImg.t==='none'?null:draftImg):(autoEmoji(fr.value,ko.value)?{t:'emoji',v:autoEmoji(fr.value,ko.value)}:null);
     $('#pp').innerHTML=im?picHtml(im,'m').replace('margin:8px 0',''):'<div class="pic m" style="font-size:14px;color:var(--muted)">그림 없음</div>'};
   fr.oninput=ko.oninput=()=>{if(!draftImg)prev()};
+  fr.addEventListener('input',()=>{clearTimeout(lk.t);lk.t=setTimeout(()=>autoLook(fr,ko,prev),700)});
+  fr.addEventListener('blur',()=>{if(fr.value.trim()!==lk.done){clearTimeout(lk.t);autoLook(fr,ko,prev)}});
+  ko.addEventListener('input',()=>{lk.auto=''});
   $('#pick').onclick=()=>openPicker(fr.value.trim()||'(불어)',ko.value.trim()||'(뜻)',draftImg,v=>{draftImg=v;prev()});
   prev();
   $('#pv').onclick=()=>fr.value.trim()?speak(fr.value.trim()):toast('불어를 먼저 입력하세요');
   const doSave=()=>{
     const f=fr.value.trim(),k=ko.value.trim();
     if(!f||!k){toast('불어와 뜻을 모두 입력하세요');return}
-    const it={id:uid(),fr:f,ko:k,kind:f.includes(' ')?'문장':'단어',added:today(),right:0,wrong:0};
+    const it={id:uid(),fr:f,ko:k,kind:kindOf(f),added:today(),right:0,wrong:0};lk.done='';lk.auto='';
     if(draftImg)it.img=draftImg;draftImg=null;
     S.items.push(it);
     save();toast('저장했어요 ✓');vAdd();renderNav();$('#fr').focus();
@@ -433,6 +453,88 @@ function vAdd(){
   $('#sv').onclick=doSave;
   [fr,ko].forEach(el=>el.onkeydown=e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();doSave()}else if(e.key==='Enter'&&el===ko){e.preventDefault();doSave()}});
   bindRows();
+}
+// ---------- 🔎 자동 뜻 찾기 + 정관사 ----------
+// 뜻: 앱 안 표현 → Google 번역 → 위키낱말사전(fr.wiktionary)의 한국어 번역
+// 성별: 위키낱말사전의 {{m}} / {{f}} 표시. 못 찾으면 끝 글자로 추측
+var lk={t:null,seq:0,done:'',auto:''};
+const VOW=/^[aeiouyâàäéèêëîïôöûùüœæ]/i;
+const lcache={};
+async function wikiInfo(w){
+  if(w in lcache)return lcache[w];
+  let r=null;
+  try{
+    const j=await (await fetch('https://fr.wiktionary.org/w/api.php?action=parse&prop=wikitext&format=json&formatversion=2&redirects=1&origin=*&page='+encodeURIComponent(w))).json();
+    let t=j.parse&&j.parse.wikitext||'';
+    const a=t.indexOf('{{langue|fr}}');
+    if(a>=0){
+      t=t.slice(a);const b=t.indexOf('{{langue|',5);if(b>0)t=t.slice(0,b);
+      const pos=[...t.matchAll(/\{\{S\|([^|}]+)\|fr/g)].map(m=>[m[1],m.index]).filter(([n])=>!/étymologie|prononciation|voir|référence|anagramme|traduction|synonyme|dérivé|apparenté|variante|vocabulaire|hyperonyme|hyponyme|méronyme|holonyme|homophone|paronyme|antonyme|composé|expression|note|attestation|forme|abréviation|quasi|troponyme|gentilé|augmentatif|diminutif|phrase|proverbe|citation/i.test(n));
+      const first=pos[0];
+      r={noun:!!first&&/^nom( commun)?$/i.test(first[0]),pos:first?first[0]:'',g:'',hAsp:/\{\{h aspiré\}\}/.test(t),ko:[]};
+      if(r.noun){
+        const line=(t.slice(first[1]).split('\n').find(l=>l.startsWith("'''"))||'');
+        r.g=/\{\{p\}\}/.test(line)?'p':/\{\{mf\??\}\}/.test(line)?'mf':/\{\{f\}\}/.test(line)?'f':/\{\{m\}\}/.test(line)?'m':'';
+        if(/\{\{h aspiré\}\}/.test(line))r.hAsp=true;
+      }
+      r.ko=[...new Set([...t.matchAll(/\{\{trad[+-]?\|ko\|([^|}]+)/g)].map(m=>m[1].trim()))].slice(0,3);
+    }
+  }catch(_){r=undefined}
+  if(r!==undefined)lcache[w]=r;
+  return r;
+}
+async function gtrans(q){
+  try{
+    const j=await (await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=fr&tl=ko&dt=t&q='+encodeURIComponent(q))).json();
+    return (j[0]||[]).map(x=>x[0]).join('').trim();
+  }catch(_){return ''}
+}
+const guessG=w=>/(tion|sion|té|ette|ence|ance|ure|ie|ise|ade|elle|esse|ique|ée|ode|ude|eur)$/i.test(w)&&!/(ment|age|eau|isme|oir|ier)$/i.test(w)?'f':'m';
+function artFor(base,info){
+  const g=info&&info.g||guessG(base);
+  if(g==='p')return 'les';
+  if(VOW.test(base)||(/^h/i.test(base)&&!(info&&info.hAsp)))return "l'";
+  return g==='f'?'la':'le';
+}
+const withArt=(a,base)=>a?(a.endsWith("'")?a:a+' ')+base:base;
+function localKo(raw,base){
+  const n=s=>s.toLowerCase().replace(/[’]/g,"'").replace(/[!?.,]/g,'').trim();
+  const all=[...S.items,...(typeof PITEMS!=='undefined'?Object.values(PITEMS):[])];
+  return all.filter(x=>n(x.fr)===n(raw)||n(x.fr.replace(ARTRE,''))===n(base)).map(x=>x.ko);
+}
+async function autoLook(fr,ko,prev){
+  const raw=fr.value.trim(),seq=++lk.seq;
+  const A=$('#art'),K=$('#kosug');if(!A||!K)return;
+  lk.done=raw;
+  if(!raw){A.innerHTML='';K.innerHTML='';return}
+  K.innerHTML='<div class="muted" style="font-size:13px;margin-top:6px">🔎 뜻 찾는 중…</div>';
+  const m=raw.match(ARTRE),base=raw.replace(ARTRE,'').trim();
+  const isWord=!!base&&!/\s/.test(base)&&base.length<=30&&!/[!?.]/.test(base);
+  let info=null,q=raw;
+  if(isWord)info=await wikiInfo(base.toLowerCase());
+  if(seq!==lk.seq)return;
+  A.innerHTML='';
+  if(isWord&&(info?info.noun:true)){
+    const sug=artFor(base,info),cur=m?m[1].toLowerCase().replace('’',"'"):'';
+    const sure=info&&info.noun&&info.g;
+    if(!m&&sure&&fr.value.trim()===raw){fr.value=withArt(sug,base);lk.done=fr.value.trim();q=fr.value.trim()} // 명사면 정관사를 자동으로 붙여요
+    const now=fr.value.trim().match(ARTRE);const nowA=now?now[1].toLowerCase().replace('’',"'"):'';
+    const gtxt=!info||!info.noun?'':info.g==='f'?'여성 명사':info.g==='m'?'남성 명사':info.g==='mf'?'남녀 같은 형태 명사':info.g==='p'?'복수 명사':'';
+    A.innerHTML=`<div style="margin-top:8px;font-size:14px"><span class="muted">정관사:</span> ${['le','la',"l'",'les',''].map(a=>`<button class="chip ${a===nowA?'on':''}" data-art="${a}">${a?esc(withArt(a,base)):'없이'}</button>`).join(' ')}
+      <div class="muted" style="font-size:12px;margin-top:4px">${sure?`📗 사전: <b>${esc(base)}</b> = ${gtxt} → <b>${esc(sug)}</b>`:info&&info.noun?'사전에 성별 표시가 없어 끝 글자로 추측했어요':'사전에서 못 찾아서 끝 글자로 추측했어요 (명사가 아니면 \'없이\')'} · le=남성 · la=여성 · l'=모음/무음 h 앞 · les=복수</div></div>`;
+    if(!m&&!sure)A.querySelector(`[data-art="${sug}"]`).style.outline='2px dashed var(--accent)';
+    A.querySelectorAll('[data-art]').forEach(b=>b.onclick=()=>{fr.value=withArt(b.dataset.art,base);lk.done=fr.value.trim();A.querySelectorAll('[data-art]').forEach(x=>x.classList.toggle('on',x===b));prev()});
+  }
+  const loc=localKo(fr.value.trim(),base);
+  const g=await gtrans(q);
+  if(seq!==lk.seq)return;
+  const sugs=[...new Set([...loc,g,...(info&&info.ko||[])].filter(Boolean))].slice(0,5);
+  if(!sugs.length){K.innerHTML='<div class="muted" style="font-size:13px;margin-top:6px">자동으로 못 찾았어요. 뜻을 직접 써 주세요.</div>';return}
+  if(!ko.value.trim()||ko.value===lk.auto){ko.value=sugs[0];lk.auto=sugs[0]}
+  K.innerHTML=`<div style="margin-top:6px;font-size:14px"><span class="muted">🔎 자동 뜻 (눌러서 고르기):</span> ${sugs.map(x=>`<button class="chip ${x===ko.value?'on':''}" data-ko="${esc(x)}">${esc(x)}</button>`).join(' ')}
+    <div class="muted" style="font-size:12px;margin-top:4px">자동 번역이라 틀릴 수 있어요. 고쳐 써도 돼요.</div></div>`;
+  K.querySelectorAll('[data-ko]').forEach(b=>b.onclick=()=>{ko.value=b.dataset.ko;lk.auto=ko.value;K.querySelectorAll('[data-ko]').forEach(x=>x.classList.toggle('on',x===b));prev()});
+  prev();
 }
 function itemRow(x){
   const w=S.wrong[x.id];
@@ -462,6 +564,10 @@ function vTest(){
   if(!setup.session)setup.session=isMorning()?'morning':'evening';
   const t=S.settings.types;
   $('#view').innerHTML=`${listenCard()}
+  <div class="card"><h2>🔤 내 단어 시험</h2>
+    <div class="muted">${esc(ME.n)}님이 저장한 <b>단어만</b> 따로 시험해요. 범위·문제 수·유형은 아래 설정을 따라요.</div>
+    <div style="margin-top:10px"><button class="btn pri big" id="wgo">🔤 단어 시험 시작 (<span id="wn"></span>문제)</button></div>
+  </div>
   <div class="card"><h2>테스트 설정</h2>
     <label class="f">언제?</label>
     <div class="seg" data-k="session"><button data-v="morning">☀️ 아침</button><button data-v="evening">🌙 저녁</button></div>
@@ -473,25 +579,27 @@ function vTest(){
     <div class="opts">${Object.entries(TYPES).map(([k,[n,d]])=>`<label><input type="checkbox" data-type="${k}" ${t[k]?'checked':''}><span><b>${n}</b><small>${d}</small></span></label>`).join('')}</div>
     <div style="margin-top:14px"><button class="btn pri big" id="go">시작하기 (<span id="n"></span>문제)</button></div>
   </div>`;
-  const sync=()=>{document.querySelectorAll('.seg').forEach(s=>s.querySelectorAll('button').forEach(b=>b.classList.toggle('on',String(setup[s.dataset.k])===b.dataset.v)));$('#n').textContent=pool().slice(0,setup.count).length};
+  const sync=()=>{document.querySelectorAll('.seg').forEach(s=>s.querySelectorAll('button').forEach(b=>b.classList.toggle('on',String(setup[s.dataset.k])===b.dataset.v)));$('#n').textContent=pool().slice(0,setup.count).length;$('#wn').textContent=pool().filter(x=>x.kind==='단어').slice(0,setup.count).length};
   document.querySelectorAll('.seg').forEach(s=>s.onclick=e=>{const b=e.target.closest('button');if(!b)return;setup[s.dataset.k]=s.dataset.k==='count'?+b.dataset.v:b.dataset.v;sync()});
   document.querySelectorAll('[data-type]').forEach(c=>c.onchange=()=>{t[c.dataset.type]=c.checked;save()});
   $('#go').onclick=()=>startTest();
+  $('#wgo').onclick=()=>startTest('words');
   bindListenCard();sync();
 }
 function pool(){
   const lim=setup.scope==='today'?today():setup.scope==='week'?daysAgo(6):'0000';
   return S.items.filter(x=>x.added>=lim);
 }
-function startTest(wrongOnly){
+function startTest(mode){
+  const wrongOnly=mode===true,words=mode==='words';
   const types=Object.keys(TYPES).filter(k=>S.settings.types[k]);
   if(!types.length){toast('문제 유형을 하나 이상 고르세요');tab='test';render();return}
-  let items=wrongOnly?S.items.filter(x=>S.wrong[x.id]):pool();
-  if(!items.length){toast(wrongOnly?'오답이 없어요 🎉':'이 범위에 저장된 표현이 없어요');tab=wrongOnly?'wrong':'test';render();return}
+  let items=wrongOnly?S.items.filter(x=>S.wrong[x.id]):words?pool().filter(x=>x.kind==='단어'):pool();
+  if(!items.length){toast(wrongOnly?'오답이 없어요 🎉':words?'이 범위에 저장한 단어가 없어요 (범위를 \'전체\'로 바꿔 보세요)':'이 범위에 저장된 표현이 없어요');tab=wrongOnly?'wrong':'test';render();return}
   // 오답노트에 있는 것 먼저 + 섞기
   items=shuffle(items).sort((a,b)=>(S.wrong[b.id]?1:0)-(S.wrong[a.id]?1:0));
   if(!wrongOnly)items=shuffle(items.slice(0,setup.count));
-  T={wrongOnly,session:wrongOnly?null:(setup.session||(isMorning()?'morning':'evening')),i:0,res:[],
+  T={wrongOnly,session:wrongOnly?null:words?'words':(setup.session||(isMorning()?'morning':'evening')),i:0,res:[],
      qs:items.map(it=>({id:it.id,type:types[Math.random()*types.length|0]})),answered:false};
   tab='test';render();
 }
@@ -520,7 +628,7 @@ function vQuestion(){
           <div class="row"><button class="btn" id="selfno" style="flex:1">😓 어려웠어요</button><button class="btn" id="selfok" style="flex:1">😀 잘 말했어요</button></div>`}`;
   $('#view').innerHTML=`
   <div class="card">
-    <div class="row" style="justify-content:space-between;margin-bottom:6px"><span class="muted">${T.wrongOnly?'📕 오답 복습':T.session==='morning'?'☀️ 아침 테스트':'🌙 저녁 테스트'} · ${T.i+1} / ${T.qs.length}</span>
+    <div class="row" style="justify-content:space-between;margin-bottom:6px"><span class="muted">${T.wrongOnly?'📕 오답 복습':T.session==='words'?'🔤 단어 시험':T.session==='morning'?'☀️ 아침 테스트':'🌙 저녁 테스트'} · ${T.i+1} / ${T.qs.length}</span>
       <button class="btn sm" id="quit">그만하기</button></div>
     <div class="bar"><i style="width:${T.i/T.qs.length*100}%"></i></div>
     <div class="qtype">${tn}</div>
@@ -600,14 +708,14 @@ function finish(){
   if(T.cur&&T.answered){record(T.cur);T.cur=null}
   T.done=true;
   const score=T.res.filter(r=>r.ok).length;
-  if(T.session&&T.res.length){const l=S.log[today()]||(S.log[today()]={});l[T.session]={score,total:T.res.length}}
+  if(T.session&&T.session!=='words'&&T.res.length){const l=S.log[today()]||(S.log[today()]={});l[T.session]={score,total:T.res.length}}
   if(T.res.length)S.history.push({d:today(),at:timeNow(),s:T.session||'review',score,total:T.res.length,wrong:[...new Set(T.res.filter(r=>!r.ok).map(r=>r.id))]});
   save();renderNav();vResult();
 }
 function vResult(){
   const score=T.res.filter(r=>r.ok).length,tot=T.res.length,wrongs=T.res.filter(r=>!r.ok),cleared=T.res.filter(r=>r.cleared);
   $('#view').innerHTML=`
-  <div class="card" style="text-align:center"><div class="muted">${T.wrongOnly?'📕 오답 복습':T.session==='morning'?'☀️ 아침 테스트':'🌙 저녁 테스트'} 결과</div>
+  <div class="card" style="text-align:center"><div class="muted">${T.wrongOnly?'📕 오답 복습':T.session==='words'?'🔤 단어 시험':T.session==='morning'?'☀️ 아침 테스트':'🌙 저녁 테스트'} 결과</div>
     <div class="score">${score} / ${tot}</div>
     <div>${tot&&score===tot?'완벽해요! Bravo ! 👏':score/tot>=.7?'잘했어요! Très bien !':'괜찮아요, 틀린 건 오답노트에서 다시 봐요 💪'}</div>
     ${cleared.length?`<div class="muted" style="margin-top:6px">✨ ${cleared.length}개가 오답노트에서 졸업했어요 (2번 연속 정답)</div>`:''}
@@ -776,7 +884,7 @@ function aDay(){
   </div>
 
   <div class="card"><h2>📚 이날의 공부</h2>
-    ${runs.length?runs.map(h=>`<div class="item"><div class="t"><b>${h.s==='morning'?'☀️ 아침 테스트':h.s==='evening'?'🌙 저녁 테스트':h.s==='listen'?'👂 듣기 평가':'📕 오답 복습'}</b> <span class="muted">${esc(h.at)}</span>
+    ${runs.length?runs.map(h=>`<div class="item"><div class="t"><b>${h.s==='morning'?'☀️ 아침 테스트':h.s==='evening'?'🌙 저녁 테스트':h.s==='listen'?'👂 듣기 평가':h.s==='words'?'🔤 단어 시험':'📕 오답 복습'}</b> <span class="muted">${esc(h.at)}</span>
       <div class="muted">${h.score}/${h.total} 맞음${h.wrong.length?' · 틀린 것: '+h.wrong.map(id=>byId(id)?.fr).filter(Boolean).map(esc).join(', '):''}</div></div></div>`).join('')
       :'<div class="muted">테스트 기록이 없어요.</div>'}
     <h2 style="margin-top:16px">저장한 표현 (${items.length})</h2>
@@ -1816,7 +1924,7 @@ const isFresh=s=>s.items.every(x=>x.sample)&&!Object.keys(s.diary).length&&!Obje
 const enc=str=>{const b=new TextEncoder().encode(str);let r='';for(let i=0;i<b.length;i+=0x8000)r+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000));return btoa(r)};
 const dec=b64=>new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g,'')),c=>c.charCodeAt(0)));
 function api(method,body,raw){
-  return fetch(`https://api.github.com/repos/${SYNC.repo}/contents/data.json`,{method,cache:'no-store',
+  return fetch(`https://api.github.com/repos/${SYNC.repo}/contents/${DATAFILE}`,{method,cache:'no-store',
     headers:{Authorization:'Bearer '+SYNC.token,Accept:raw?'application/vnd.github.raw+json':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'},
     body:body?JSON.stringify(body):undefined});
 }
@@ -1830,7 +1938,7 @@ async function pull(){
   return {data:JSON.parse(text),sha:j.sha};
 }
 async function push(sha){
-  const body={message:'기록 동기화 '+today()+' '+timeNow(),content:enc(JSON.stringify(S))};if(sha)body.sha=sha;
+  const body={message:ME.n+' 기록 동기화 '+today()+' '+timeNow(),content:enc(JSON.stringify(S))};if(sha)body.sha=sha;
   const r=await api('PUT',body);
   if(r.status===409||r.status===422)return false; // 다른 기기가 방금 저장함 → 다시 받아서 합치기
   if(!r.ok)throw new Error(String(r.status));
@@ -1847,10 +1955,10 @@ async function syncNow(manual){
       const {data,sha}=await pull();
       const before=sig(S);
       let next=S;
-      if(data){if(!data.stamp)data.stamp={};next=(!SYNC.joined&&isFresh(S))?data:merge(S,data)}
+      if(data){if(!data.stamp)data.stamp={};next=(!SYNC[JK]&&isFresh(S))?data:merge(S,data)}
       S=next;fix();snap=parts(S);
       try{localStorage.setItem(KEY,JSON.stringify(S))}catch(_){}
-      if(!SYNC.joined){SYNC.joined=true;saveSync()}
+      if(!SYNC[JK]){SYNC[JK]=true;saveSync()}
       done=(data&&sig(data)===sig(S))?true:await push(sha);
       if(sig(S)!==before)softRender();
     }
@@ -1910,7 +2018,7 @@ function bindSyncCard(){
       if(!r.ok)throw new Error('GitHub 오류 '+r.status);
       const j=await r.json();
       if(!j.private&&!confirm('⚠️ 이 저장소는 공개 저장소예요. 일기가 누구에게나 보일 수 있어요. 그래도 연결할까요?'))throw new Error('연결을 취소했어요');
-      SYNC={repo,token,joined:false};SYNC.lastErr='';saveSync();
+      SYNC={repo,token};SYNC.lastErr='';saveSync();
       await syncNow(true);
       if(syncState==='err'){const msg=SYNC.lastErr;SYNC={};saveSync();setSync('off');throw new Error(msg||'연결 실패')}
       render();
@@ -1919,6 +2027,31 @@ function bindSyncCard(){
   const n=$('#synow');if(n)n.onclick=()=>syncNow(true);
   const off=$('#syoff');if(off)off.onclick=()=>{if(!confirm('이 기기의 동기화 연결을 끊을까요? (이 기기와 클라우드의 기록은 지워지지 않아요)'))return;SYNC={};saveSync();setSync('off');render()};
 }
+
+// ---------- 👤 사람 바꾸기 ----------
+function profBtn(){const b=$('#prof');if(b){b.textContent=ME.e+' '+ME.n;b.title='공부하는 사람 바꾸기'}}
+function profPicker(first){
+  const d=document.createElement('div');d.className='ovl';
+  d.innerHTML=`<div class="card" style="max-width:360px;margin:18vh auto 0"><h2>누가 공부하나요? 👤</h2>
+    <div class="muted">사람마다 저장한 단어·문장, 시험 기록, 오답노트, 스피킹 기록이 <b>따로</b> 보관돼요.</div>
+    <div class="row" style="margin-top:12px">${PROFS.map(p=>`<button class="btn big ${!first&&p.c===PROF?'pri':''}" data-pf="${p.c}" style="flex:1">${p.e} ${p.n}</button>`).join('')}</div>
+    ${first?'':'<button class="btn sm" id="pfx" style="margin-top:10px;width:100%">닫기</button>'}</div>`;
+  document.body.appendChild(d);
+  const x=d.querySelector('#pfx');if(x)x.onclick=()=>d.remove();
+  d.querySelectorAll('[data-pf]').forEach(b=>b.onclick=async()=>{
+    const c=b.dataset.pf;
+    if(first){try{localStorage.setItem(PK,c)}catch(_){}if(c===PROF){d.remove();return}location.reload();return}
+    if(c===PROF){d.remove();return}
+    if(((T&&!T.done)||(typeof SP!=='undefined'&&SP)||(typeof L!=='undefined'&&L))&&!confirm('하던 것을 멈추고 바꿀까요?'))return;
+    b.disabled=true;b.textContent='바꾸는 중…';
+    if(syncOn()){clearTimeout(syncTimer);syncTimer=null;try{await syncNow()}catch(_){}} // 지금 사람 기록을 먼저 올려요
+    try{localStorage.setItem(PK,c)}catch(_){}
+    location.reload();
+  });
+}
+$('#prof').onclick=()=>profPicker(false);
+profBtn();
+if(profFirst)setTimeout(()=>profPicker(true),300);
 
 if(location.hash==='#admin')tab='admin';
 snap=parts(S);
