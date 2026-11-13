@@ -56,6 +56,11 @@ label.f{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
 .opts small{display:block;color:var(--muted)}
 .seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .seg button{flex:1;font:inherit;padding:9px;border:0;background:var(--card);color:var(--ink);cursor:pointer}
+.seg.wrap{flex-wrap:wrap}.seg.wrap button{flex:1 1 30%}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:inherit;font-size:13px;padding:6px 10px;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--ink);cursor:pointer}
+.chip small{color:var(--muted)}
+.chip.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}.chip.on small{color:inherit;opacity:.8}
 .seg button.on{background:var(--accent);color:var(--accent-ink);font-weight:600}
 .bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-bottom:14px}
 .bar i{display:block;height:100%;background:var(--accent);transition:width .3s}
@@ -145,7 +150,7 @@ function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&Array.is
 function save(){if(typeof onSaved==='function')onSaved();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 let S=load();
 function fix(){S.todos=S.todos||{};S.diary=S.diary||{};S.history=S.history||[];S.settings=S.settings||{};S.wrong=S.wrong||{};S.log=S.log||{};S.stamp=S.stamp||{};S.speak=S.speak||{};
-  S.settings.sp=Object.assign({goalMin:60,goalReps:300,reps:5,pause:'mid',mode:(window.SpeechRecognition||window.webkitSpeechRecognition)?'mic':'auto',show:'text',scope:'least',slowFirst:true},S.settings.sp||{})}
+  S.settings.sp=Object.assign({goalMin:60,goalReps:300,reps:5,pause:'mid',mode:(window.SpeechRecognition||window.webkitSpeechRecognition)?'mic':'auto',show:'text',scope:'least',slowFirst:true,pk:'s',cat:'👋 인사'},S.settings.sp||{})}
 fix();
 
 // ---------- 유틸 ----------
@@ -154,7 +159,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),1600)}
 const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a};
 const isMorning=()=>new Date().getHours()<14;
-const byId=id=>S.items.find(x=>x.id===id);
+const byId=id=>S.items.find(x=>x.id===id)||(typeof PITEMS!=='undefined'?PITEMS[id]:undefined);
 
 function norm(s,strict){
   s=(s||'').toLowerCase().replace(/[’‘`´]/g,"'").replace(/œ/g,'oe').replace(/æ/g,'ae');
@@ -927,6 +932,7 @@ function spQueue(){
   if(c.scope==='today')list=list.filter(x=>x.added===today());
   else if(c.scope==='week')list=list.filter(x=>x.added>=daysAgo(6));
   else if(c.scope==='wrong')list=list.filter(x=>S.wrong[x.id]);
+  else if(c.scope==='pack')return packIds().map((id,i)=>[id,saidTotal(id),i]).sort((a,b)=>a[1]-b[1]||a[2]-b[2]).map(a=>a[0]); // 필수 100: 순서대로, 적게 말한 것부터
   list=shuffle(list);
   // 적게 말한 것부터 (오답노트에 있는 건 더 앞으로)
   if(c.scope==='least'){const score=x=>saidTotal(x.id)-(S.wrong[x.id]?50:0);list.sort((a,b)=>score(a)-score(b))}
@@ -1046,7 +1052,8 @@ function spDraw(){
 function vSpeak(){
   if(SP)return spDraw();
   const c=S.settings.sp,d=spGet(),pm=Math.min(1,d.sec/(c.goalMin*60)),pr=Math.min(1,d.reps/c.goalReps);
-  const top=S.items.map(x=>[x,saidTotal(x.id)]).filter(a=>a[1]).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const said=new Set();for(const k in S.speak)for(const id in (S.speak[k].by||{}))said.add(id);
+  const top=[...said].map(byId).filter(Boolean).map(x=>[x,saidTotal(x.id)]).filter(a=>a[1]).sort((a,b)=>b[1]-a[1]).slice(0,10);
   $('#view').innerHTML=`
   <div class="card"><h2>🎧 오늘의 스피킹 분량</h2>
     <div class="row" style="justify-content:space-between"><span>⏱️ 말하기 시간</span><b>${Math.floor(d.sec/60)} / ${c.goalMin}분</b></div>
@@ -1058,8 +1065,9 @@ function vSpeak(){
     <div style="margin-top:14px"><button class="btn pri big" id="spgo">🎧 이어폰 끼고 ${d.sec?'이어서 하기':'시작하기'}</button></div>
     <div class="muted" style="margin-top:8px;text-align:center">🔊 듣고 → 🗣️ 따라 말하고 → 🔊 듣고 → 🗣️ 따라 말하고… 문장마다 ${c.reps}번씩, 시간은 실제로 훈련한 시간만 쌓여요</div>
   </div>
+  ${packHtml()}
   <div class="card"><h2>훈련 설정</h2>
-    <label class="f">연습할 문장</label><div class="seg" data-k="scope"><button data-v="least">적게 말한 것</button><button data-v="today">오늘</button><button data-v="week">7일</button><button data-v="wrong">오답</button><button data-v="all">전체</button></div>
+    <label class="f">연습할 문장</label><div class="seg wrap" data-k="scope"><button data-v="pack">⭐ 필수 100</button><button data-v="least">적게 말한 것</button><button data-v="today">오늘</button><button data-v="week">7일</button><button data-v="wrong">오답</button><button data-v="all">전체</button></div>
     <label class="f">문장당 반복</label><div class="seg" data-k="reps"><button data-v="3">3번</button><button data-v="5">5번</button><button data-v="10">10번</button></div>
     <label class="f">따라 말할 시간</label><div class="seg" data-k="pause"><button data-v="short">짧게</button><button data-v="mid">보통</button><button data-v="long">길게</button></div>
     <label class="f">횟수 세기</label><div class="seg" data-k="mode"><button data-v="mic" ${SR?'':'disabled'}>🎤 내 목소리 인식</button><button data-v="auto">⏱️ 자동 진행</button></div>
@@ -1070,14 +1078,282 @@ function vSpeak(){
     <label class="f">하루 목표 횟수</label><div class="seg" data-k="goalReps"><button data-v="200">200회</button><button data-v="300">300회</button><button data-v="500">500회</button><button data-v="800">800회</button></div>
   </div>
   <div class="card"><h2>많이 말한 표현 🗣️</h2>
-    ${top.length?top.map(([x,n])=>`<div class="item">${thumb(x)}<div class="t"><div class="fr">${esc(x.fr)}</div><div class="muted">${esc(x.ko)}</div></div><b>${n}번</b></div>`).join(''):'<div class="muted">아직 없어요. 시작하면 표현마다 몇 번 말했는지 쌓여요.</div>'}
+    ${top.length?top.map(([x,n])=>`<div class="item">${x.pack?`<div class="pic s">${esc(x.img.v)}</div>`:thumb(x)}<div class="t"><div class="fr">${esc(x.fr)}</div><div class="muted">${esc(x.ko)}</div></div><b>${n}번</b></div>`).join(''):'<div class="muted">아직 없어요. 시작하면 표현마다 몇 번 말했는지 쌓여요.</div>'}
   </div>`;
   const NUM=new Set(['reps','goalMin','goalReps']);
   const sync=()=>document.querySelectorAll('.seg[data-k]').forEach(s=>s.querySelectorAll('button').forEach(b=>b.classList.toggle('on',String(c[s.dataset.k])===b.dataset.v)));
   document.querySelectorAll('.seg[data-k]').forEach(s=>s.onclick=e=>{const b=e.target.closest('button');if(!b||b.disabled)return;const k=s.dataset.k;c[k]=NUM.has(k)?+b.dataset.v:b.dataset.v;save();if(k==='goalMin'||k==='goalReps')vSpeak();else sync()});
   $('#spslow').onchange=e=>{c.slowFirst=e.target.checked;save()};
   $('#spgo').onclick=spStart;
-  sync();
+  bindPack();sync();
+}
+
+// ---------- ⭐ 필수 100 (유치원·초등학생 수준 실전 문장 100 + 단어 100) ----------
+// 순서를 바꾸면 안 돼요: 순서대로 ps001~ps100, pw001~pw100 번호가 붙고, 말한 횟수가 이 번호로 쌓여요.
+const PACK_SRC={
+s:`👋 인사
+Bonjour !|안녕하세요 (아침·낮 인사)|👋
+Salut !|안녕! (친구끼리)|🙋
+Bonsoir !|안녕하세요 (저녁 인사)|🌆
+Bonne nuit !|잘 자!|🌙
+Au revoir !|안녕히 가세요 / 잘 가|👋
+À demain !|내일 봐!|📅
+À tout à l'heure !|이따 봐!|⏳
+Ça va ?|잘 지내? / 괜찮아?|🙂
+Ça va bien, merci.|잘 지내, 고마워.|😊
+Et toi ?|너는?|👉
+Bonne journée !|좋은 하루 보내!|☀️
+Bienvenue !|환영해!|🤗
+🙏 예의
+Merci !|고마워!|🙏
+Merci beaucoup !|정말 고마워!|💐
+De rien.|천만에.|😊
+S'il te plaît.|부탁해 (친구·아이에게)|🥺
+S'il vous plaît.|부탁합니다 (어른·처음 보는 사람에게)|🙇
+Pardon !|미안! / 잠깐 지나갈게요|🙇
+Excuse-moi.|미안해 / 실례해|😅
+Ce n'est pas grave.|괜찮아, 별거 아니야.|👌
+🧒 나 소개
+Comment tu t'appelles ?|이름이 뭐야?|📛
+Je m'appelle Léa.|내 이름은 레아야. (Léa 자리에 내 이름)|📛
+Tu as quel âge ?|몇 살이야?|🎂
+J'ai six ans.|나는 여섯 살이야.|🎂
+Je viens de Corée.|나는 한국에서 왔어.|🇰🇷
+J'habite à Abidjan.|나는 아비장에 살아.|🇨🇮
+Je parle un peu français.|나는 프랑스어를 조금 해.|🗣️
+C'est ma maman.|우리 엄마야.|👩
+💬 대답
+Oui.|응 / 네|✅
+Non.|아니|❌
+D'accord.|알았어 / 좋아|👌
+Bien sûr !|물론이지!|👍
+Peut-être.|아마도|🤔
+Non, merci.|아니, 괜찮아 (사양할 때)|🙅
+Moi aussi.|나도.|🙋
+Moi non plus.|나도 아니야.|🙅
+C'est vrai ?|정말이야?|😮
+Je ne sais pas.|몰라.|🤷
+Pas encore.|아직이야.|⏳
+Je suis là !|나 여기 있어!|📍
+🆘 이해·소통
+Je ne comprends pas.|이해가 안 돼.|😵
+Tu peux répéter ?|다시 말해 줄래?|🔁
+Plus lentement, s'il te plaît.|좀 더 천천히 말해 줘.|🐢
+Qu'est-ce que c'est ?|이게 뭐야?|❓
+Ça veut dire quoi ?|그게 무슨 뜻이야?|💭
+Comment on dit ça en français ?|이거 프랑스어로 뭐라고 해?|🇫🇷
+J'ai compris !|이해했어!|💡
+Regarde !|봐!|👀
+🙋 필요·부탁
+J'ai faim.|배고파.|🤤
+J'ai soif.|목말라.|💧
+Je veux de l'eau, s'il te plaît.|물 주세요.|🚰
+Je peux aller aux toilettes ?|화장실 가도 돼요?|🚻
+Aide-moi, s'il te plaît.|도와줘.|🆘
+Je peux avoir ça ?|이거 가져도 돼?|🎁
+Donne-moi ça, s'il te plaît.|그거 줘.|🤲
+Attends-moi !|나 기다려 줘!|✋
+Je veux ça.|이거 할래 / 이거 갖고 싶어.|👉
+Encore, s'il te plaît !|더 줘! / 한 번 더 해 줘!|➕
+Je peux venir ?|나도 가도 돼?|🚶
+J'ai besoin d'aide.|도움이 필요해.|🙋
+😊 기분·몸
+J'ai mal au ventre.|배 아파.|🤕
+J'ai mal à la tête.|머리 아파.|🤕
+J'ai froid.|추워.|🥶
+J'ai chaud.|더워.|🥵
+J'ai sommeil.|졸려.|😴
+J'ai peur.|무서워.|😨
+Je suis malade.|나 아파 (병났어).|🤒
+Je suis triste.|슬퍼.|😢
+Je suis fatigué.|피곤해. (여자: fatiguée, 발음 같아요)|🥱
+Je suis content.|기뻐. (여자: contente)|😄
+Je t'aime.|사랑해.|❤️
+Ça fait mal !|아파! (다쳤을 때)|🩹
+❓ 질문
+Où sont les toilettes ?|화장실 어디예요?|🚻
+C'est où ?|어디야?|📍
+C'est combien ?|얼마예요?|💰
+Quelle heure est-il ?|몇 시예요?|⏰
+Qui est-ce ?|누구야?|👤
+Pourquoi ?|왜?|❓
+Tu veux jouer ?|같이 놀래?|⚽
+Tu es où ?|너 어디야?|📱
+Qu'est-ce que tu fais ?|뭐 해?|👀
+On y va ?|갈까?|🚶
+⚽ 놀이·학교
+C'est mon tour !|내 차례야!|🎲
+C'est à toi !|네 차례야!|👉
+J'ai gagné !|내가 이겼다!|🏆
+J'ai fini !|다 했어!|✅
+Viens ici !|이리 와!|👋
+Dépêche-toi !|서둘러!|🏃
+Attention !|조심해!|⚠️
+Bravo !|잘했어!|👏
+Encore une fois !|한 번 더!|🔁
+C'est à moi !|그거 내 거야!|✋
+🏠 생활
+C'est bon !|맛있어!|😋
+Bon appétit !|맛있게 먹어!|🍽️
+J'aime ça.|이거 좋아.|❤️
+Je n'aime pas ça.|이거 싫어.|🙅
+Il fait chaud aujourd'hui.|오늘 덥다.|☀️
+Il pleut.|비가 와.|🌧️
+Je vais à l'école.|학교 가.|🏫
+Je rentre à la maison.|집에 가.|🏠`,
+w:`👨‍👩‍👧 가족·사람
+maman|엄마|👩
+papa|아빠|👨
+le frère|형·오빠·남동생|👦
+la sœur|누나·언니·여동생|👧
+le bébé|아기|👶
+l'ami|친구 (여자 친구: l'amie)|🧑‍🤝‍🧑
+le garçon|남자아이|👦
+la fille|여자아이 / 딸|👧
+la maîtresse|선생님 (초등, 남자: le maître)|👩‍🏫
+la famille|가족|👨‍👩‍👧
+🍎 음식
+l'eau|물|💧
+le pain|빵|🥖
+le riz|쌀 / 밥|🍚
+le lait|우유|🥛
+la banane|바나나|🍌
+la pomme|사과|🍎
+le poulet|닭고기|🍗
+le poisson|생선 / 물고기|🐟
+le jus|주스|🧃
+le gâteau|케이크 / 과자|🍰
+🐶 동물
+le chien|개|🐶
+le chat|고양이|🐱
+l'oiseau|새|🐦
+la poule|닭 (암탉)|🐔
+la vache|소|🐄
+le lion|사자|🦁
+l'éléphant|코끼리|🐘
+le singe|원숭이|🐒
+le serpent|뱀|🐍
+le cheval|말|🐴
+🧍 몸
+la tête|머리|🙆
+les yeux|눈|👀
+le nez|코|👃
+la bouche|입|👄
+l'oreille|귀|👂
+la main|손|✋
+le pied|발|🦶
+le ventre|배|🫃
+les dents|이 (치아)|🦷
+les cheveux|머리카락|💇
+🎨 색깔
+rouge|빨간색|🔴
+bleu|파란색|🔵
+jaune|노란색|🟡
+vert|초록색|🟢
+noir|검은색|⚫
+blanc|흰색|⚪
+orange|주황색|🟠
+rose|분홍색|🌸
+violet|보라색|🟣
+marron|갈색|🟤
+🔢 숫자
+un|1|1️⃣
+deux|2|2️⃣
+trois|3|3️⃣
+quatre|4|4️⃣
+cinq|5|5️⃣
+six|6|6️⃣
+sept|7|7️⃣
+huit|8|8️⃣
+neuf|9|9️⃣
+dix|10|🔟
+🏠 집·물건
+la maison|집|🏠
+la porte|문|🚪
+la chambre|방 / 침실|🛏️
+le lit|침대|🛌
+la table|탁자 / 식탁|🍽️
+la chaise|의자|🪑
+la télé|텔레비전|📺
+le téléphone|전화기 / 휴대폰|📱
+la voiture|자동차|🚗
+l'argent|돈|💰
+🏫 학교·놀이
+l'école|학교|🏫
+le livre|책|📕
+le stylo|볼펜|🖊️
+le crayon|연필|✏️
+le cahier|공책|📓
+le sac|가방|🎒
+la classe|교실 / 반|🧑‍🏫
+le ballon|공|⚽
+le jouet|장난감|🧸
+la récré|쉬는 시간|🛝
+☀️ 자연·때
+le soleil|해|☀️
+la pluie|비|🌧️
+l'arbre|나무|🌳
+la fleur|꽃|🌸
+la mer|바다|🌊
+aujourd'hui|오늘|📅
+demain|내일|📆
+hier|어제|⏪
+le matin|아침|🌅
+la nuit|밤|🌙
+🏃 동작
+manger|먹다|🍽️
+boire|마시다|🥤
+dormir|자다|😴
+jouer|놀다|⚽
+aller|가다|🚶
+venir|오다|🙌
+parler|말하다|🗣️
+regarder|보다|👀
+aimer|좋아하다 / 사랑하다|❤️
+vouloir|원하다|🤲`};
+const PACKS={},PITEMS={};
+for(const p of ['s','w']){
+  const cats=[];let n=0;
+  PACK_SRC[p].split('\n').forEach(l=>{
+    l=l.trim();if(!l)return;
+    if(!l.includes('|')){cats.push({name:l,ids:[]});return}
+    const [fr,ko,e]=l.split('|'),id='p'+p+String(++n).padStart(3,'0');
+    PITEMS[id]={id,fr,ko,kind:p==='s'?'문장':'단어',added:'',right:0,wrong:0,img:{t:'emoji',v:e},pack:p,cat:cats[cats.length-1].name};
+    cats[cats.length-1].ids.push(id);
+  });
+  PACKS[p]={title:p==='s'?'💬 필수 문장 100':'🔤 필수 단어 100',cats};
+}
+function packIds(){
+  const c=S.settings.sp,P=PACKS[c.pk]||PACKS.s;
+  return (P.cats.find(x=>x.name===c.cat)||{ids:P.cats.flatMap(x=>x.ids)}).ids;
+}
+function packHtml(){
+  const c=S.settings.sp,P=PACKS[c.pk],all=P.cats.flatMap(x=>x.ids),ids=packIds();
+  const said=all.filter(id=>saidTotal(id)).length,mine=new Set(S.items.map(x=>x.id));
+  const chip=(v,label,ids)=>{const d=ids.filter(id=>saidTotal(id)).length;return `<button class="chip ${c.cat===v?'on':''}" data-cat="${esc(v)}">${esc(label)} <small>${d}/${ids.length}</small></button>`};
+  return `<div class="card" id="pack"><h2>⭐ 필수 100 · 진짜 기초 회화</h2>
+    <div class="muted" style="margin-bottom:10px">유치원·초등학생이 매일 쓰는 짧고 실전적인 표현만 골랐어요. 이것부터 입에 붙이세요!</div>
+    <div class="seg" id="pk"><button data-v="s" class="${c.pk==='s'?'on':''}">💬 문장 100</button><button data-v="w" class="${c.pk==='w'?'on':''}">🔤 단어 100</button></div>
+    <div class="row" style="justify-content:space-between;margin:10px 0 4px"><span>말해 본 표현</span><b>${said} / 100</b></div>
+    <div class="bar" style="margin-bottom:10px"><i style="width:${said}%;background:var(--good)"></i></div>
+    <div class="chips">${chip('','전체',all)}${P.cats.map(x=>chip(x.name,x.name,x.ids)).join('')}</div>
+    <button class="btn pri" id="pkgo" style="width:100%;margin:10px 0 4px">▶ ${esc(c.cat||'전체')} ${ids.length}개 듣고 따라 말하기</button>
+    ${ids.map(id=>{const x=PITEMS[id],n=saidTotal(id);return `<div class="item"><div class="pic s">${esc(x.img.v)}</div>
+      <div class="t"><div class="fr">${esc(x.fr)}${n?`<span class="tag">🗣️${n}</span>`:''}</div><div class="muted">${esc(x.ko)}</div></div>
+      <button class="ib" data-say="${esc(x.fr)}" title="듣기">🔊</button>${mine.has(id)?'<span class="ib" title="내 목록에 있어요 (테스트에도 나와요)">✅</span>':`<button class="ib" data-padd="${id}" title="내 목록에 넣기 (테스트에도 나와요)">＋</button>`}</div>`}).join('')}
+    <div class="row" style="margin-top:10px"><button class="btn sm" id="pkadd">＋ 이 ${ids.length}개 모두 내 목록에 넣기 (테스트에도 나와요)</button></div>
+  </div>`;
+}
+function bindPack(){
+  const c=S.settings.sp,re=()=>{const y=window.scrollY;vSpeak();window.scrollTo(0,y)};
+  $('#pk').onclick=e=>{const b=e.target.closest('button');if(!b)return;c.pk=b.dataset.v;c.cat=PACKS[c.pk].cats[0].name;save();re()};
+  document.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{c.cat=b.dataset.cat;save();re()});
+  $('#pkgo').onclick=()=>{c.scope='pack';save();spStart()};
+  const add=ids=>{const have=new Set(S.items.map(x=>x.id));let k=0;
+    ids.forEach(id=>{if(have.has(id))return;const{pack,cat,...x}=PITEMS[id];S.items.push({...x,img:{...x.img},added:today()});k++});
+    save();re();toast(k?`📚 ${k}개를 내 목록에 넣었어요`:'이미 다 들어 있어요')};
+  document.querySelectorAll('[data-padd]').forEach(b=>b.onclick=()=>add([b.dataset.padd]));
+  $('#pkadd').onclick=()=>add(packIds());
 }
 
 // ---------- ☁️ 기기 간 동기화 (GitHub 비공개 저장소의 data.json) ----------
