@@ -126,6 +126,7 @@ label.f{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
 <body>
 <div class="wrap">
   <header><div class="flag"><i></i><i></i><i></i></div><div><h1>매일 불어 테스트</h1><div class="muted" id="sub"></div></div><span id="sync" style="margin-left:auto;font-size:18px;cursor:pointer"></span><a href="#admin" class="adm" id="adm">🔒 관리자</a></header>
+  <div id="inapp" class="card" style="display:none;border-color:var(--accent);background:var(--soft)"></div>
   <main id="view"></main>
 </div>
 <nav id="nav"></nav>
@@ -225,7 +226,7 @@ function ttsGuard(u){
     toast(voices.length?'소리가 안 나오면 컴퓨터 볼륨·음소거와 브라우저 탭 음소거를 확인해 주세요':'이 컴퓨터에 프랑스어 음성이 없어요. Chrome이나 Edge로 열거나, 컴퓨터 설정에서 프랑스어 음성을 설치해 주세요',6000)},2500);
 }
 function speak(text,slow){
-  if(!hasTTS){toast('이 브라우저는 음성 재생을 지원하지 않아요');return}
+  if(!hasTTS){toast('이 화면에서는 소리가 안 나와요. 맨 위 안내대로 Chrome으로 열어 주세요',4000);window.scrollTo(0,0);return}
   speechSynthesis.cancel();
   const u=new SpeechSynthesisUtterance(text);u.lang='fr-FR';
   const v=voices.find(v=>v.name===S.settings.voice)||voices.find(v=>/fr[-_]CI/i.test(v.lang))||voices.find(v=>/fr[-_]FR/i.test(v.lang))||voices[0];
@@ -1922,6 +1923,24 @@ function bindSyncCard(){
 if(location.hash==='#admin')tab='admin';
 snap=parts(S);
 setSync(syncOn()?'busy':'off');
+// 카카오톡·인스타 같은 앱 안에서 열면 소리(음성)가 안 나와요 → Chrome으로 열도록 안내
+(function(){
+  const ua=navigator.userAgent,android=/Android/i.test(ua),ios=/iPhone|iPad|iPod/i.test(ua);
+  const kakao=/KAKAOTALK/i.test(ua),inapp=kakao||/Instagram|FBAN|FBAV|FB_IAB|Line\/|NAVER\(|Whale\/.*inapp|; wv\)|DaumApps|everytimeApp|Snapchat|TikTok|musical_ly/i.test(ua);
+  if(!inapp&&hasTTS)return;
+  const url=location.href.split('#')[0];
+  const box=$('#inapp');box.style.display='block';
+  box.innerHTML=`<b>🔇 지금 화면에서는 불어 소리가 안 나와요</b>
+    <div class="muted" style="margin:6px 0 10px">${inapp?'카카오톡·인스타그램 같은 앱 안에서 열면 음성이 막혀 있어요.':'이 브라우저는 음성 재생을 지원하지 않아요.'} ${ios?'<b>Safari</b>':'<b>Chrome</b>'}으로 열어 주세요.</div>
+    <div class="row"><button class="btn pri sm" id="openext">${ios?'Safari':'Chrome'}으로 열기</button><button class="btn sm" id="copyurl">주소 복사</button></div>
+    <div class="muted" style="font-size:13px;margin-top:8px">버튼이 안 되면: 오른쪽 위(또는 아래) <b>⋮ / ···</b> 메뉴 → <b>"다른 브라우저로 열기"</b>를 누르세요.</div>`;
+  $('#openext').onclick=()=>{
+    if(kakao)location.href='kakaotalk://web/openExternal?url='+encodeURIComponent(url);
+    else if(android)location.href='intent://'+url.replace(/^https?:\/\//,'')+'#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url='+encodeURIComponent(url)+';end';
+    else toast('⋯ 메뉴에서 "Safari로 열기"를 눌러 주세요',4000);
+  };
+  $('#copyurl').onclick=async()=>{try{await navigator.clipboard.writeText(url);toast('주소를 복사했어요. Chrome 주소창에 붙여 넣으세요',4000)}catch(e){prompt('이 주소를 복사하세요',url)}};
+})();
 render();
 if(syncOn())syncNow();
 </script>
