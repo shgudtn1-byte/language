@@ -177,7 +177,7 @@ function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&Array.is
 function save(){if(typeof onSaved==='function')onSaved();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 let S=load();
 function fix(){S.items.forEach(x=>{if(!x.pack&&!/^p[swgc]\d{3}$/.test(x.id))x.kind=kindOf(x.fr)});S.todos=S.todos||{};S.diary=S.diary||{};S.history=S.history||[];S.settings=S.settings||{};S.wrong=S.wrong||{};S.log=S.log||{};S.stamp=S.stamp||{};S.speak=S.speak||{};
-  S.settings.sp=Object.assign({goalMin:60,goalReps:300,reps:5,pause:'mid',mode:(window.SpeechRecognition||window.webkitSpeechRecognition)?'mic':'auto',show:'text',scope:'least',slowFirst:true,pk:'s',cat:'👋 인사'},S.settings.sp||{})}
+  S.settings.wtypes=Object.assign({say:true,speak:true,spell:false,dict:false},S.settings.wtypes||{});S.settings.sp=Object.assign({goalMin:60,goalReps:300,reps:5,pause:'mid',mode:(window.SpeechRecognition||window.webkitSpeechRecognition)?'mic':'auto',show:'text',scope:'least',slowFirst:true,pk:'s',cat:'👋 인사'},S.settings.sp||{})}
 fix();
 
 // ---------- 유틸 ----------
@@ -554,7 +554,8 @@ const TYPES={
   spell:['✍️ 스펠링','한국어 뜻을 보고 불어로 쓰기'],
   dict:['🎧 받아쓰기','불어 소리만 듣고 그대로 쓰기'],
   both:['🎧✍️ 듣고 뜻+불어','문장은 안 보여요. 듣고 뜻과 불어를 모두 쓰기'],
-  speak:['🗣️ 읽고 듣고 말하기','문장을 보고, 원어민 소리 듣고, 따라 말하기'],
+  speak:['🗣️ 보고 듣고 따라 읽기','철자를 보고, 원어민 소리 듣고, 따라 말하기'],
+  say:['🇰🇷→🗣️ 뜻 보고 불어로 말하기','한국어만 보고 불어로 말한 뒤, 소리와 철자로 확인'],
 };
 const setup={session:null,scope:'all',count:15};
 let T=null;
@@ -565,7 +566,9 @@ function vTest(){
   const t=S.settings.types;
   $('#view').innerHTML=`${listenCard()}
   <div class="card"><h2>🔤 내 단어 시험</h2>
-    <div class="muted">${esc(ME.n)}님이 저장한 <b>단어만</b> 따로 시험해요. 범위·문제 수·유형은 아래 설정을 따라요.</div>
+    <div class="muted">${esc(ME.n)}님이 저장한 <b>단어만</b> 따로 시험해요. 범위·문제 수는 아래 설정을 따라요.</div>
+    <label class="f">단어 시험 유형 (섞어서 나와요)</label>
+    <div class="opts">${['say','speak','spell','dict'].map(k=>`<label><input type="checkbox" data-wtype="${k}" ${S.settings.wtypes[k]?'checked':''}><span><b>${TYPES[k][0]}</b><small>${TYPES[k][1]}</small></span></label>`).join('')}</div>
     <div style="margin-top:10px"><button class="btn pri big" id="wgo">🔤 단어 시험 시작 (<span id="wn"></span>문제)</button></div>
   </div>
   <div class="card"><h2>테스트 설정</h2>
@@ -582,6 +585,7 @@ function vTest(){
   const sync=()=>{document.querySelectorAll('.seg').forEach(s=>s.querySelectorAll('button').forEach(b=>b.classList.toggle('on',String(setup[s.dataset.k])===b.dataset.v)));$('#n').textContent=pool().slice(0,setup.count).length;$('#wn').textContent=pool().filter(x=>x.kind==='단어').slice(0,setup.count).length};
   document.querySelectorAll('.seg').forEach(s=>s.onclick=e=>{const b=e.target.closest('button');if(!b)return;setup[s.dataset.k]=s.dataset.k==='count'?+b.dataset.v:b.dataset.v;sync()});
   document.querySelectorAll('[data-type]').forEach(c=>c.onchange=()=>{t[c.dataset.type]=c.checked;save()});
+  document.querySelectorAll('[data-wtype]').forEach(c=>c.onchange=()=>{S.settings.wtypes[c.dataset.wtype]=c.checked;save()});
   $('#go').onclick=()=>startTest();
   $('#wgo').onclick=()=>startTest('words');
   bindListenCard();sync();
@@ -592,8 +596,8 @@ function pool(){
 }
 function startTest(mode){
   const wrongOnly=mode===true,words=mode==='words';
-  const types=Object.keys(TYPES).filter(k=>S.settings.types[k]);
-  if(!types.length){toast('문제 유형을 하나 이상 고르세요');tab='test';render();return}
+  const types=Object.keys(TYPES).filter(k=>(words?S.settings.wtypes:S.settings.types)[k]);
+  if(!types.length){toast(words?'단어 시험 유형을 하나 이상 고르세요':'문제 유형을 하나 이상 고르세요');tab='test';render();return}
   let items=wrongOnly?S.items.filter(x=>S.wrong[x.id]):words?pool().filter(x=>x.kind==='단어'):pool();
   if(!items.length){toast(wrongOnly?'오답이 없어요 🎉':words?'이 범위에 저장한 단어가 없어요 (범위를 \'전체\'로 바꿔 보세요)':'이 범위에 저장된 표현이 없어요');tab=wrongOnly?'wrong':'test';render();return}
   // 오답노트에 있는 것 먼저 + 섞기
@@ -626,6 +630,11 @@ function vQuestion(){
     ${SR?`<button class="btn big mic" id="mic">🎤 눌러서 말하기</button><div class="muted" id="heard" style="margin-top:8px"></div>`
         :`<div class="muted" style="margin-bottom:8px">이 브라우저는 음성 인식이 안 돼요 (Chrome 추천). 스스로 평가해 주세요.</div>
           <div class="row"><button class="btn" id="selfno" style="flex:1">😓 어려웠어요</button><button class="btn" id="selfok" style="flex:1">😀 잘 말했어요</button></div>`}`;
+  if(q.type==='say')body=`<div class="muted">이 뜻을 <b>불어로 소리 내어</b> 말해 보세요. 말한 뒤 원어민 소리와 철자로 확인해요.</div>
+    <div class="prompt">${esc(it.ko)}</div>${hint}
+    ${SR?`<button class="btn big mic" id="mic">🎤 눌러서 불어로 말하기</button><div class="muted" id="heard" style="margin-top:8px"></div>`
+        :`<div class="muted" style="margin-bottom:8px">소리 내어 말한 다음 눌러 주세요 (정답 소리와 철자가 나와요)</div>
+          <div class="row"><button class="btn" id="selfno" style="flex:1">😓 몰랐어요</button><button class="btn" id="selfok" style="flex:1">😀 말했어요 → 확인</button></div>`}`;
   $('#view').innerHTML=`
   <div class="card">
     <div class="row" style="justify-content:space-between;margin-bottom:6px"><span class="muted">${T.wrongOnly?'📕 오답 복습':T.session==='words'?'🔤 단어 시험':T.session==='morning'?'☀️ 아침 테스트':'🌙 저녁 테스트'} · ${T.i+1} / ${T.qs.length}</span>
@@ -634,26 +643,26 @@ function vQuestion(){
     <div class="qtype">${tn}</div>
     ${body}
     <div id="fb"></div>
-    <div style="margin-top:14px"><button class="btn pri big" id="act">${q.type==='speak'?'건너뛰기':'확인'}</button></div>
+    <div style="margin-top:14px"><button class="btn pri big" id="act">${q.type==='speak'?'건너뛰기':q.type==='say'?'모르겠어요 (정답 보기)':'확인'}</button></div>
   </div>`;
   T.answered=false;
   const hb=$('#hintb');if(hb)hb.onclick=()=>{$('#hint').classList.remove('hide');hb.remove();(a2||a1)?.focus()};
   $('#quit').onclick=()=>{if(confirm('테스트를 끝낼까요? 지금까지 결과는 저장돼요.'))finish()};
   const a1=$('#a1'),a2=$('#a2');
-  if(q.type==='dict'||q.type==='both')setTimeout(()=>speak(it.fr),250);
+  if(q.type==='dict'||q.type==='both'||(q.type==='speak'&&T.session==='words'))setTimeout(()=>speak(it.fr),250);
   (a2||a1)?.focus();
   if(a2)a2.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();a1.focus()}};
   if(a1)a1.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();act()}};
   $('#act').onclick=act;
   function act(){
     if(T.answered)return next();
-    if(q.type==='speak')return answer(false,{heard:''},'건너뜀');
+    if(q.type==='speak'||q.type==='say')return answer(false,{heard:''},'건너뜀');
     const r=gradeFr(a1.value,it.fr);
     let ok=r.ok,koOk=true;
     if(q.type==='both'){koOk=gradeKo(a2.value,it.ko);ok=ok&&koOk}
     answer(ok,{fr:a1.value,ko:a2?.value,frOk:r.ok,koOk,note:r.note});
   }
-  if(q.type==='speak'){
+  if(q.type==='speak'||q.type==='say'){
     if(SR){
       const mic=$('#mic');let rec=null;
       mic.onclick=()=>{
@@ -671,7 +680,14 @@ function vQuestion(){
         rec.start();mic.classList.add('rec');mic.textContent='⏹ 듣는 중… (누르면 끝)';
       };
     }else{
-      $('#selfok').onclick=()=>answer(true,{self:true});
+      $('#selfok').onclick=()=>{
+        if(q.type!=='say')return answer(true,{self:true});
+        // 정답을 먼저 보여 주고, 맞게 말했는지 스스로 고르기
+        $('#selfok').parentNode.innerHTML=`<div style="width:100%"><div class="prompt" style="margin:4px 0">${esc(it.fr)} <button class="ib" data-say="${esc(it.fr)}">🔊</button></div>${it.pron?`<div class="pron">${esc(it.pron)}</div>`:''}
+          <div class="row" style="margin-top:8px"><button class="btn" id="sn2" style="flex:1">😓 달랐어요</button><button class="btn pri" id="sy2" style="flex:1">😀 똑같이 말했어요</button></div></div>`;
+        speak(it.fr);
+        $('#sy2').onclick=()=>answer(true,{self:true});$('#sn2').onclick=()=>answer(false,{self:true});
+      };
       $('#selfno').onclick=()=>answer(false,{self:true});
     }
   }
@@ -682,6 +698,13 @@ function vQuestion(){
     let detail='';
     if(q.type==='speak'){
       detail=info.heard?`<div>들린 말: <i>${esc(info.heard)}</i> (${Math.round((info.sim||0)*100)}% 일치)</div>`:'';
+    }else if(q.type==='say'){
+      detail=`${$('#hint:not(.hide)')?'':picHtml(im,'m')}<div class="prompt" style="margin:6px 0">${esc(it.fr)} <button class="ib" data-say="${esc(it.fr)}">🔊</button> <button class="ib" data-say="${esc(it.fr)}" data-slow="1">🐢</button></div>
+        ${it.pron?`<div class="pron">${esc(it.pron)}</div>`:''}<div>뜻: ${esc(it.ko)}</div>
+        ${info.heard?`<div class="muted" style="margin-top:6px">들린 말: <i>${esc(info.heard)}</i> (${Math.round((info.sim||0)*100)}% 일치)</div>`:''}
+        <div class="muted" style="margin-top:6px">🔊 소리를 듣고 한 번 더 따라 말해 보세요.</div>`;
+      $('#mic')?.remove();
+      setTimeout(()=>speak(it.fr),300);
     }else{
       detail=`${q.type!=='spell'&&!$('#hint:not(.hide)')?picHtml(im,'m'):''}<div style="margin-top:6px">정답:<b>${info.frOk?esc(it.fr):diffHtml(info.fr,it.fr)}</b> <button class="ib" data-say="${esc(it.fr)}">🔊</button></div>
         <div>뜻: ${esc(it.ko)}</div>
@@ -689,7 +712,7 @@ function vQuestion(){
         ${info.note?`<div style="margin-top:6px">⚠️ ${info.note}</div>`:''}`;
     }
     fb.innerHTML=`<div class="fb ${ok?'ok':'no'}"><h3>${ok?'정답! 🎉':'아쉬워요 — 오답노트에 저장할게요'}</h3>${detail}
-      ${!ok&&!info.self?`<div style="margin-top:10px"><button class="btn sm" id="ovr">사실 맞았어요 (비슷한 뜻 등)</button></div>`:''}</div>`;
+      ${!ok&&!info.self&&info.heard!==''?`<div style="margin-top:10px"><button class="btn sm" id="ovr">사실 맞았어요 (비슷한 뜻 등)</button></div>`:''}</div>`;
     const ovr=$('#ovr');if(ovr)ovr.onclick=()=>{T.cur.ok=true;fb.querySelector('.fb').className='fb ok';fb.querySelector('h3').textContent='맞은 걸로 처리했어요 ✓';ovr.remove()};
     if(!ok&&q.type!=='speak')speak(it.fr);
     $('#act').textContent=T.i+1<T.qs.length?'다음 →':'결과 보기';
