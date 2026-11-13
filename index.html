@@ -147,6 +147,8 @@ const ME=PROFS.find(p=>p.c===PROF);
 const KEY=PROF==='noh'?'frstudy.v1':'frstudy.v1.'+PROF;
 const DATAFILE=PROF==='noh'?'data.json':'data-'+PROF+'.json';
 const JK=PROF==='noh'?'joined':'joined_'+PROF;
+// 백은정: 모든 테스트를 '한국어 보고 불어로 말하기' 한 가지로만
+const ONLY_SAY=PROF==='baek';
 // '정관사 + 단어 하나'는 단어, 띄어쓴 말이 있으면 문장
 const ARTRE=/^(le|la|les|l['’]|un|une|des)\s*/i;
 const kindOf=f=>f.trim().replace(ARTRE,'').trim().includes(' ')?'문장':'단어';
@@ -564,11 +566,12 @@ function vTest(){
   if(L)return lDraw();
   if(!setup.session)setup.session=isMorning()?'morning':'evening';
   const t=S.settings.types;
-  $('#view').innerHTML=`${listenCard()}
+  const sayNote=`<div class="muted" style="margin-top:8px">🇰🇷→🗣️ ${esc(ME.n)}님 테스트는 <b>한국어 뜻을 보고 불어로 말하기</b> 한 가지로만 나와요. 말하고 나면 원어민 소리와 철자로 확인해요.</div>`;
+  $('#view').innerHTML=`${ONLY_SAY?'':listenCard()}
   <div class="card"><h2>🔤 내 단어 시험</h2>
     <div class="muted">${esc(ME.n)}님이 저장한 <b>단어만</b> 따로 시험해요. 범위·문제 수는 아래 설정을 따라요.</div>
-    <label class="f">단어 시험 유형 (섞어서 나와요)</label>
-    <div class="opts">${['say','speak','spell','dict'].map(k=>`<label><input type="checkbox" data-wtype="${k}" ${S.settings.wtypes[k]?'checked':''}><span><b>${TYPES[k][0]}</b><small>${TYPES[k][1]}</small></span></label>`).join('')}</div>
+    ${ONLY_SAY?sayNote:`<label class="f">단어 시험 유형 (섞어서 나와요)</label>
+    <div class="opts">${['say','speak','spell','dict'].map(k=>`<label><input type="checkbox" data-wtype="${k}" ${S.settings.wtypes[k]?'checked':''}><span><b>${TYPES[k][0]}</b><small>${TYPES[k][1]}</small></span></label>`).join('')}</div>`}
     <div style="margin-top:10px"><button class="btn pri big" id="wgo">🔤 단어 시험 시작 (<span id="wn"></span>문제)</button></div>
   </div>
   <div class="card"><h2>테스트 설정</h2>
@@ -578,8 +581,8 @@ function vTest(){
     <div class="seg" data-k="scope"><button data-v="today">오늘 것</button><button data-v="week">최근 7일</button><button data-v="all">전체</button></div>
     <label class="f">문제 수</label>
     <div class="seg" data-k="count"><button data-v="10">10</button><button data-v="15">15</button><button data-v="30">30</button><button data-v="999">전부</button></div>
-    <label class="f">문제 유형 (섞어서 나와요)</label>
-    <div class="opts">${Object.entries(TYPES).map(([k,[n,d]])=>`<label><input type="checkbox" data-type="${k}" ${t[k]?'checked':''}><span><b>${n}</b><small>${d}</small></span></label>`).join('')}</div>
+    ${ONLY_SAY?sayNote:`<label class="f">문제 유형 (섞어서 나와요)</label>
+    <div class="opts">${Object.entries(TYPES).map(([k,[n,d]])=>`<label><input type="checkbox" data-type="${k}" ${t[k]?'checked':''}><span><b>${n}</b><small>${d}</small></span></label>`).join('')}</div>`}
     <div style="margin-top:14px"><button class="btn pri big" id="go">시작하기 (<span id="n"></span>문제)</button></div>
   </div>`;
   const sync=()=>{document.querySelectorAll('.seg').forEach(s=>s.querySelectorAll('button').forEach(b=>b.classList.toggle('on',String(setup[s.dataset.k])===b.dataset.v)));$('#n').textContent=pool().slice(0,setup.count).length;$('#wn').textContent=pool().filter(x=>x.kind==='단어').slice(0,setup.count).length};
@@ -596,7 +599,7 @@ function pool(){
 }
 function startTest(mode){
   const wrongOnly=mode===true,words=mode==='words';
-  const types=Object.keys(TYPES).filter(k=>(words?S.settings.wtypes:S.settings.types)[k]);
+  const types=ONLY_SAY?['say']:Object.keys(TYPES).filter(k=>(words?S.settings.wtypes:S.settings.types)[k]);
   if(!types.length){toast(words?'단어 시험 유형을 하나 이상 고르세요':'문제 유형을 하나 이상 고르세요');tab='test';render();return}
   let items=wrongOnly?S.items.filter(x=>S.wrong[x.id]):words?pool().filter(x=>x.kind==='단어'):pool();
   if(!items.length){toast(wrongOnly?'오답이 없어요 🎉':words?'이 범위에 저장한 단어가 없어요 (범위를 \'전체\'로 바꿔 보세요)':'이 범위에 저장된 표현이 없어요');tab=wrongOnly?'wrong':'test';render();return}
