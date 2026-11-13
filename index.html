@@ -167,7 +167,7 @@ fix();
 // ---------- 유틸 ----------
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),1600)}
+function toast(m,ms){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),ms||1600)}
 const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a};
 const isMorning=()=>new Date().getHours()<14;
 const byId=id=>S.items.find(x=>x.id===id)||(typeof PITEMS!=='undefined'?PITEMS[id]:undefined);
@@ -215,6 +215,15 @@ const hasTTS='speechSynthesis' in window;
 let voices=[];
 function loadVoices(){if(!hasTTS)return;voices=speechSynthesis.getVoices().filter(v=>/^fr/i.test(v.lang))}
 if(hasTTS){loadVoices();speechSynthesis.onvoiceschanged=()=>{loadVoices();if(tab==='list')render()}}
+// 소리가 안 날 때: 음성 목록 다시 읽기 + 멈춘 엔진 깨우기 + 2.5초 안에 시작 안 하면 안내
+let ttsWarned=false;
+function ttsGuard(u){
+  if(!voices.length)loadVoices();
+  try{speechSynthesis.resume()}catch(e){}
+  let started=false;const prev=u.onstart;u.onstart=e=>{started=true;prev&&prev(e)};
+  setTimeout(()=>{if(started||ttsWarned)return;ttsWarned=true;
+    toast(voices.length?'소리가 안 나오면 컴퓨터 볼륨·음소거와 브라우저 탭 음소거를 확인해 주세요':'이 컴퓨터에 프랑스어 음성이 없어요. Chrome이나 Edge로 열거나, 컴퓨터 설정에서 프랑스어 음성을 설치해 주세요',6000)},2500);
+}
 function speak(text,slow){
   if(!hasTTS){toast('이 브라우저는 음성 재생을 지원하지 않아요');return}
   speechSynthesis.cancel();
@@ -222,7 +231,7 @@ function speak(text,slow){
   const v=voices.find(v=>v.name===S.settings.voice)||voices.find(v=>/fr[-_]CI/i.test(v.lang))||voices.find(v=>/fr[-_]FR/i.test(v.lang))||voices[0];
   if(v){u.voice=v;u.lang=v.lang}
   u.rate=slow?0.55:S.settings.rate;
-  speechSynthesis.speak(u);
+  ttsGuard(u);speechSynthesis.speak(u);
 }
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 
@@ -909,7 +918,7 @@ function speakP(text,slow,who){
     const fin=()=>{if(done)return;done=true;clearTimeout(t);res(Math.max(800,Date.now()-t0))};
     u.onend=fin;u.onerror=fin;
     const t=setTimeout(fin,text.length*(slow?170:110)+4000);
-    speechSynthesis.speak(u);
+    ttsGuard(u);speechSynthesis.speak(u);
   });
 }
 // 내 목소리를 듣고 문장과 얼마나 비슷한지 확인해요
