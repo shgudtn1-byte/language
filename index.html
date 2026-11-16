@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>매일 불어 테스트</title>
 <style>
-:root{--bg:#f7f4ee;--card:#fff;--ink:#1f1d1a;--muted:#6b665e;--line:#e4ded3;--accent:#e2701b;--accent-ink:#fff;--soft:#fbeee2;--good:#16815a;--good-soft:#e3f4ec;--bad:#c8372d;--bad-soft:#fbe6e4}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#171614;--card:#22201d;--ink:#f1ede6;--muted:#a49d92;--line:#38342f;--accent:#f08a3c;--accent-ink:#1a120b;--soft:#3a2a1d;--good:#4cc28c;--good-soft:#16302a;--bad:#ef6a5f;--bad-soft:#3a1d1a}}
-:root[data-theme="dark"]{--bg:#171614;--card:#22201d;--ink:#f1ede6;--muted:#a49d92;--line:#38342f;--accent:#f08a3c;--accent-ink:#1a120b;--soft:#3a2a1d;--good:#4cc28c;--good-soft:#16302a;--bad:#ef6a5f;--bad-soft:#3a1d1a}
+:root{--bg:#f7f4ee;--card:#fff;--ink:#1f1d1a;--muted:#6b665e;--line:#e4ded3;--accent:#e2701b;--accent-ink:#fff;--soft:#fbeee2;--good:#16815a;--good-soft:#e3f4ec;--bad:#c8372d;--bad-soft:#fbe6e4;--masc:#1f63d6;--fem:#d6304a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#171614;--card:#22201d;--ink:#f1ede6;--muted:#a49d92;--line:#38342f;--accent:#f08a3c;--accent-ink:#1a120b;--soft:#3a2a1d;--good:#4cc28c;--good-soft:#16302a;--bad:#ef6a5f;--bad-soft:#3a1d1a;--masc:#6ea8ff;--fem:#ff7286}}
+:root[data-theme="dark"]{--bg:#171614;--card:#22201d;--ink:#f1ede6;--muted:#a49d92;--line:#38342f;--accent:#f08a3c;--accent-ink:#1a120b;--soft:#3a2a1d;--good:#4cc28c;--good-soft:#16302a;--bad:#ef6a5f;--bad-soft:#3a1d1a;--masc:#6ea8ff;--fem:#ff7286}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif}
 .wrap{max-width:640px;margin:0 auto;padding:16px 16px 96px}
@@ -98,7 +98,7 @@ label.f{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
 .grid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;cursor:pointer;border:3px solid transparent;background:var(--bg)}
 .grid img:hover{border-color:var(--accent)}
 .adm{margin-left:8px;font-size:13px;color:var(--muted);text-decoration:none;border:1px solid var(--line);padding:5px 10px;border-radius:16px;white-space:nowrap;background:var(--card)}
-@media(max-width:420px){.adm{margin-left:4px;padding:4px 8px;font-size:12px}h1{font-size:18px;white-space:nowrap}}
+@media(max-width:420px){header{flex-wrap:wrap;row-gap:6px}.adm{margin-left:4px;padding:4px 8px;font-size:12px}h1{font-size:18px;white-space:nowrap}}
 .ovl{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:30;padding:16px;overflow:auto}
 .adm:hover{border-color:var(--accent);color:var(--accent)}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px}
@@ -108,6 +108,11 @@ label.f{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
 .seg.wrap2{flex-wrap:wrap}.seg.wrap2 button{flex:1 1 45%;font-size:14px}
 .gram{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:0 0 12px;font-size:14px;line-height:1.6}.gram summary{cursor:pointer;font-weight:700;color:var(--accent)}.gram ol{padding-left:18px;margin:8px 0}.gram li{margin-bottom:8px}
 .pron{font-size:13px;color:var(--accent);margin:1px 0}.pron.big{font-size:17px;margin:0 0 6px}
+.gm{color:var(--masc)}.gf{color:var(--fem)}
+.gtag{display:inline-block;font-size:11px;line-height:1.5;font-weight:700;border:1.5px solid currentColor;border-radius:8px;padding:0 5px;margin-left:6px;vertical-align:middle}
+.chip.gm:not(.on){color:var(--masc);border-color:var(--masc)}.chip.gf:not(.on){color:var(--fem);border-color:var(--fem)}
+.chip.gm.on{background:var(--masc);border-color:var(--masc);color:#fff}.chip.gf.on{background:var(--fem);border-color:var(--fem);color:#fff}
+textarea.gm,textarea.gf{font-weight:600;border-width:2px}textarea.gm{border-color:var(--masc)}textarea.gf{border-color:var(--fem)}
 .big-fr{font-size:28px;font-weight:700;line-height:1.35;margin:8px 0 4px;word-break:break-word}
 .dots{display:flex;gap:7px;justify-content:center;margin:12px 0 4px;flex-wrap:wrap}
 .dots i{width:14px;height:14px;border-radius:50%;background:var(--line)}
@@ -150,7 +155,7 @@ const JK=PROF==='noh'?'joined':'joined_'+PROF;
 // 백은정: 모든 테스트를 '한국어 보고 불어로 말하기' 한 가지로만
 const ONLY_SAY=PROF==='baek';
 // '정관사 + 단어 하나'는 단어, 띄어쓴 말이 있으면 문장
-const ARTRE=/^(le|la|les|l['’]|un|une|des)\s*/i;
+const ARTRE=/^(les(?=\s)|le(?=\s)|la(?=\s)|une(?=\s)|un(?=\s)|des(?=\s)|l['’])\s*/i;
 const kindOf=f=>f.trim().replace(ARTRE,'').trim().includes(' ')?'문장':'단어';
 const pad=n=>String(n).padStart(2,'0');
 const dstr=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
@@ -416,7 +421,7 @@ function vAdd(){
   const todays=S.items.filter(x=>x.added===today()).reverse();
   $('#view').innerHTML=`
   <div class="card"><h2>오늘 배운 것 저장 ✏️</h2>
-    <label class="f">불어 (단어 또는 문장)</label>
+    <label class="f">불어 (단어 또는 문장) <span id="gbadge"></span></label>
     <textarea id="fr" data-fr placeholder="예: Je suis coréen et j'habite à Abidjan."></textarea>
     ${accBar()}
     <div id="art"></div>
@@ -438,7 +443,7 @@ function vAdd(){
   const prev=()=>{const im=draftImg?(draftImg.t==='none'?null:draftImg):(autoEmoji(fr.value,ko.value)?{t:'emoji',v:autoEmoji(fr.value,ko.value)}:null);
     $('#pp').innerHTML=im?picHtml(im,'m').replace('margin:8px 0',''):'<div class="pic m" style="font-size:14px;color:var(--muted)">그림 없음</div>'};
   fr.oninput=ko.oninput=()=>{if(!draftImg)prev()};
-  fr.addEventListener('input',()=>{clearTimeout(lk.t);lk.t=setTimeout(()=>autoLook(fr,ko,prev),700)});
+  fr.addEventListener('input',()=>{frTint(fr);clearTimeout(lk.t);lk.t=setTimeout(()=>autoLook(fr,ko,prev),700)});
   fr.addEventListener('blur',()=>{if(fr.value.trim()!==lk.done){clearTimeout(lk.t);autoLook(fr,ko,prev)}});
   ko.addEventListener('input',()=>{lk.auto=''});
   $('#pick').onclick=()=>openPicker(fr.value.trim()||'(불어)',ko.value.trim()||'(뜻)',draftImg,v=>{draftImg=v;prev()});
@@ -474,15 +479,16 @@ async function wikiInfo(w){
       const pos=[...t.matchAll(/\{\{S\|([^|}]+)\|fr/g)].map(m=>[m[1],m.index]).filter(([n])=>!/étymologie|prononciation|voir|référence|anagramme|traduction|synonyme|dérivé|apparenté|variante|vocabulaire|hyperonyme|hyponyme|méronyme|holonyme|homophone|paronyme|antonyme|composé|expression|note|attestation|forme|abréviation|quasi|troponyme|gentilé|augmentatif|diminutif|phrase|proverbe|citation/i.test(n));
       const first=pos[0];
       r={noun:!!first&&/^nom( commun)?$/i.test(first[0]),pos:first?first[0]:'',g:'',hAsp:/\{\{h aspiré\}\}/.test(t),ko:[]};
-      if(r.noun){
-        const line=(t.slice(first[1]).split('\n').find(l=>l.startsWith("'''"))||'');
-        r.g=/\{\{p\}\}/.test(line)?'p':/\{\{mf\??\}\}/.test(line)?'mf':/\{\{f\}\}/.test(line)?'f':/\{\{m\}\}/.test(line)?'m':'';
+      const ns=pos.find(([n])=>/^nom( commun)?$/i.test(n)); // 형용사가 먼저 나와도 명사 성별은 기억해요 (ami, malade…)
+      if(ns){
+        const line=(t.slice(ns[1]).split('\n').find(l=>l.startsWith("'''"))||'');
+        r.pl=/\{\{p\}\}/.test(line);r.g=/\{\{mf\??\}\}/.test(line)?'mf':/\{\{f\}\}/.test(line)?'f':/\{\{m\}\}/.test(line)?'m':r.pl?'p':'';
         if(/\{\{h aspiré\}\}/.test(line))r.hAsp=true;
       }
       r.ko=[...new Set([...t.matchAll(/\{\{trad[+-]?\|ko\|([^|}]+)/g)].map(m=>m[1].trim()))].slice(0,3);
     }
   }catch(_){r=undefined}
-  if(r!==undefined)lcache[w]=r;
+  if(r!==undefined){lcache[w]=r;if(r&&(r.g==='m'||r.g==='f'))GC[w]=r.g}
   return r;
 }
 async function gtrans(q){
@@ -494,16 +500,52 @@ async function gtrans(q){
 const guessG=w=>/(tion|sion|té|ette|ence|ance|ure|ie|ise|ade|elle|esse|ique|ée|ode|ude|eur)$/i.test(w)&&!/(ment|age|eau|isme|oir|ier)$/i.test(w)?'f':'m';
 function artFor(base,info){
   const g=info&&info.g||guessG(base);
-  if(g==='p')return 'les';
+  if(g==='p'||(info&&info.pl))return 'les';
   if(VOW.test(base)||(/^h/i.test(base)&&!(info&&info.hAsp)))return "l'";
   return g==='f'?'la':'le';
 }
 const withArt=(a,base)=>a?(a.endsWith("'")?a:a+' ')+base:base;
+// ---------- 🔵 남성 / 🔴 여성 명사 색깔 ----------
+// le·un → 남성, la·une → 여성. l'·les는 위키낱말사전에서 찾아 이 기기에 기억해 둬요.
+const GK='frstudy.gender';
+var GC=(()=>{try{return JSON.parse(localStorage.getItem(GK))||{}}catch(_){return {}}})();
+var gQueue=[],gBusy=false,gTimer=null;
+function gOf(fr){
+  fr=String(fr||'').trim();
+  const m=fr.match(ARTRE);if(!m||m[1].toLowerCase()==='des')return '';m[2]=fr.slice(m[0].length);
+  const base=m[2].trim().toLowerCase();if(!base||/\s/.test(base.replace(/[!?.]$/,'')))return ''; // 문장은 색칠 안 해요
+  const a=m[1].toLowerCase();
+  if(a==='le'||a==='un')return 'm';if(a==='la'||a==='une')return 'f';
+  if(base in GC)return GC[base]==='m'||GC[base]==='f'?GC[base]:'';
+  if(!gQueue.includes(base))gQueue.push(base);gRun();
+  return '';
+}
+var gTries={};
+async function gRun(){
+  if(gBusy)return;gBusy=true;let found=false;const failed=[];
+  while(gQueue.length){
+    const w=gQueue.shift();if(w in GC)continue;
+    const info=await wikiInfo(w);
+    if(info===undefined){failed.push(w);continue} // 인터넷 문제면 잠시 뒤 다시
+    GC[w]=info&&(info.g==='m'||info.g==='f')?info.g:'-';found=found||GC[w]!=='-';
+    await new Promise(r=>setTimeout(r,120)); // 사전 서버에 너무 몰아서 묻지 않게
+  }
+  try{localStorage.setItem(GK,JSON.stringify(GC))}catch(_){}
+  gBusy=false;
+  const again=failed.filter(w=>(gTries[w]=(gTries[w]||0)+1)<=3);
+  if(again.length)setTimeout(()=>{again.forEach(w=>{if(!gQueue.includes(w))gQueue.push(w)});gRun()},6000);
+  if(found){clearTimeout(gTimer);gTimer=setTimeout(()=>{if(typeof softRender==='function')softRender()},300)}
+}
+// 불어를 성별 색으로 (단어일 때만 '남'/'여' 표시)
+function frG(fr,tag=true){const g=gOf(fr),t=esc(fr);return g?`<span class="g${g}">${t}</span>${tag?`<span class="gtag g${g}">${g==='m'?'남':'여'}</span>`:''}`:t}
 function localKo(raw,base){
   const n=s=>s.toLowerCase().replace(/[’]/g,"'").replace(/[!?.,]/g,'').trim();
   const all=[...S.items,...(typeof PITEMS!=='undefined'?Object.values(PITEMS):[])];
   return all.filter(x=>n(x.fr)===n(raw)||n(x.fr.replace(ARTRE,''))===n(base)).map(x=>x.ko);
 }
+// 입력칸 테두리·글자를 성별 색으로
+function frTint(fr){const g=gOf(fr.value);fr.classList.toggle('gm',g==='m');fr.classList.toggle('gf',g==='f');
+  const b=$('#gbadge');if(b)b.innerHTML=g?`<span class="gtag g${g}" style="margin:0">${g==='m'?'🔵 남성 명사':'🔴 여성 명사'}</span>`:''}
 async function autoLook(fr,ko,prev){
   const raw=fr.value.trim(),seq=++lk.seq;
   const A=$('#art'),K=$('#kosug');if(!A||!K)return;
@@ -521,11 +563,12 @@ async function autoLook(fr,ko,prev){
     const sure=info&&info.noun&&info.g;
     if(!m&&sure&&fr.value.trim()===raw){fr.value=withArt(sug,base);lk.done=fr.value.trim();q=fr.value.trim()} // 명사면 정관사를 자동으로 붙여요
     const now=fr.value.trim().match(ARTRE);const nowA=now?now[1].toLowerCase().replace('’',"'"):'';
-    const gtxt=!info||!info.noun?'':info.g==='f'?'여성 명사':info.g==='m'?'남성 명사':info.g==='mf'?'남녀 같은 형태 명사':info.g==='p'?'복수 명사':'';
-    A.innerHTML=`<div style="margin-top:8px;font-size:14px"><span class="muted">정관사:</span> ${['le','la',"l'",'les',''].map(a=>`<button class="chip ${a===nowA?'on':''}" data-art="${a}">${a?esc(withArt(a,base)):'없이'}</button>`).join(' ')}
-      <div class="muted" style="font-size:12px;margin-top:4px">${sure?`📗 사전: <b>${esc(base)}</b> = ${gtxt} → <b>${esc(sug)}</b>`:info&&info.noun?'사전에 성별 표시가 없어 끝 글자로 추측했어요':'사전에서 못 찾아서 끝 글자로 추측했어요 (명사가 아니면 \'없이\')'} · le=남성 · la=여성 · l'=모음/무음 h 앞 · les=복수</div></div>`;
+    const gtxt=!info||!info.noun?'':info.g==='f'?'<b class="gf">🔴 여성 명사</b>':info.g==='m'?'<b class="gm">🔵 남성 명사</b>':info.g==='mf'?'남녀 같은 형태 명사':info.g==='p'?'복수 명사':'';
+    A.innerHTML=`<div style="margin-top:8px;font-size:14px"><span class="muted">정관사:</span> ${['le','la',"l'",'les',''].map(a=>{const ag=a==='le'?'m':a==='la'?'f':(a&&info&&(info.g==='m'||info.g==='f'))?info.g:'';return `<button class="chip ${ag?'g'+ag:''} ${a===nowA?'on':''}" data-art="${a}">${a?esc(withArt(a,base)):'없이'}</button>`}).join(' ')}
+      <div class="muted" style="font-size:12px;margin-top:4px">${sure?`📗 사전: <b>${esc(base)}</b> = ${gtxt} → <b>${esc(sug)}</b>`:info&&info.noun?'사전에 성별 표시가 없어 끝 글자로 추측했어요':'사전에서 못 찾아서 끝 글자로 추측했어요 (명사가 아니면 \'없이\')'} · <b class="gm">le=남성(파랑)</b> · <b class="gf">la=여성(빨강)</b> · l'=모음/무음 h 앞 · les=복수</div></div>`;
     if(!m&&!sure)A.querySelector(`[data-art="${sug}"]`).style.outline='2px dashed var(--accent)';
-    A.querySelectorAll('[data-art]').forEach(b=>b.onclick=()=>{fr.value=withArt(b.dataset.art,base);lk.done=fr.value.trim();A.querySelectorAll('[data-art]').forEach(x=>x.classList.toggle('on',x===b));prev()});
+    A.querySelectorAll('[data-art]').forEach(b=>b.onclick=()=>{fr.value=withArt(b.dataset.art,base);lk.done=fr.value.trim();A.querySelectorAll('[data-art]').forEach(x=>x.classList.toggle('on',x===b));frTint(fr);prev()});
+    frTint(fr);
   }
   const loc=localKo(fr.value.trim(),base);
   const g=await gtrans(q);
@@ -541,7 +584,7 @@ async function autoLook(fr,ko,prev){
 function itemRow(x){
   const w=S.wrong[x.id];
   return `<div class="item">${thumb(x)}
-  <div class="t"><div class="fr">${esc(x.fr)}<span class="tag">${x.kind}</span>${saidTotal(x.id)?`<span class="tag">🗣️${saidTotal(x.id)}</span>`:''}${w?`<span class="tag" style="color:var(--bad)">✗${w.count}</span>`:''}</div>${x.pron?`<div class="pron">${esc(x.pron)}</div>`:''}${x.note?`<div class="note">💡 ${esc(x.note)}</div>`:''}<div class="muted">${esc(x.ko)} · ${x.added.slice(5).replace('-','/')}</div></div>
+  <div class="t"><div class="fr">${frG(x.fr)}<span class="tag">${x.kind}</span>${saidTotal(x.id)?`<span class="tag">🗣️${saidTotal(x.id)}</span>`:''}${w?`<span class="tag" style="color:var(--bad)">✗${w.count}</span>`:''}</div>${x.pron?`<div class="pron">${esc(x.pron)}</div>`:''}${x.note?`<div class="note">💡 ${esc(x.note)}</div>`:''}<div class="muted">${esc(x.ko)} · ${x.added.slice(5).replace('-','/')}</div></div>
   <button class="ib" data-say="${esc(x.fr)}" title="듣기">🔊</button><button class="ib" data-del="${x.id}" title="삭제">🗑️</button></div>`;
 }
 function bindRows(){
@@ -629,7 +672,7 @@ function vQuestion(){
     <label class="f">한국어 뜻</label><input type="text" id="a2" placeholder="무슨 뜻일까요?" autocomplete="off">
     <label class="f">불어</label><input type="text" id="a1" data-fr placeholder="들은 불어 입력" autocomplete="off" autocapitalize="off" spellcheck="false">${accBar()}`;
   if(q.type==='speak')body=`${picHtml(im,'m')}<div class="muted">① 소리 내어 읽고 → ② 원어민 소리 듣고 → ③ 따라 말하기</div>
-    <div class="prompt">${esc(it.fr)}</div><div class="muted" style="margin:-8px 0 8px">${esc(it.ko)}</div>${playBtns}
+    <div class="prompt">${frG(it.fr)}</div><div class="muted" style="margin:-8px 0 8px">${esc(it.ko)}</div>${playBtns}
     ${SR?`<button class="btn big mic" id="mic">🎤 눌러서 말하기</button><div class="muted" id="heard" style="margin-top:8px"></div>`
         :`<div class="muted" style="margin-bottom:8px">이 브라우저는 음성 인식이 안 돼요 (Chrome 추천). 스스로 평가해 주세요.</div>
           <div class="row"><button class="btn" id="selfno" style="flex:1">😓 어려웠어요</button><button class="btn" id="selfok" style="flex:1">😀 잘 말했어요</button></div>`}`;
@@ -686,7 +729,7 @@ function vQuestion(){
       $('#selfok').onclick=()=>{
         if(q.type!=='say')return answer(true,{self:true});
         // 정답을 먼저 보여 주고, 맞게 말했는지 스스로 고르기
-        $('#selfok').parentNode.innerHTML=`<div style="width:100%"><div class="prompt" style="margin:4px 0">${esc(it.fr)} <button class="ib" data-say="${esc(it.fr)}">🔊</button></div>${it.pron?`<div class="pron">${esc(it.pron)}</div>`:''}
+        $('#selfok').parentNode.innerHTML=`<div style="width:100%"><div class="prompt" style="margin:4px 0">${frG(it.fr)} <button class="ib" data-say="${esc(it.fr)}">🔊</button></div>${it.pron?`<div class="pron">${esc(it.pron)}</div>`:''}
           <div class="row" style="margin-top:8px"><button class="btn" id="sn2" style="flex:1">😓 달랐어요</button><button class="btn pri" id="sy2" style="flex:1">😀 똑같이 말했어요</button></div></div>`;
         speak(it.fr);
         $('#sy2').onclick=()=>answer(true,{self:true});$('#sn2').onclick=()=>answer(false,{self:true});
@@ -702,14 +745,14 @@ function vQuestion(){
     if(q.type==='speak'){
       detail=info.heard?`<div>들린 말: <i>${esc(info.heard)}</i> (${Math.round((info.sim||0)*100)}% 일치)</div>`:'';
     }else if(q.type==='say'){
-      detail=`${$('#hint:not(.hide)')?'':picHtml(im,'m')}<div class="prompt" style="margin:6px 0">${esc(it.fr)} <button class="ib" data-say="${esc(it.fr)}">🔊</button> <button class="ib" data-say="${esc(it.fr)}" data-slow="1">🐢</button></div>
+      detail=`${$('#hint:not(.hide)')?'':picHtml(im,'m')}<div class="prompt" style="margin:6px 0">${frG(it.fr)} <button class="ib" data-say="${esc(it.fr)}">🔊</button> <button class="ib" data-say="${esc(it.fr)}" data-slow="1">🐢</button></div>
         ${it.pron?`<div class="pron">${esc(it.pron)}</div>`:''}<div>뜻: ${esc(it.ko)}</div>
         ${info.heard?`<div class="muted" style="margin-top:6px">들린 말: <i>${esc(info.heard)}</i> (${Math.round((info.sim||0)*100)}% 일치)</div>`:''}
         <div class="muted" style="margin-top:6px">🔊 소리를 듣고 한 번 더 따라 말해 보세요.</div>`;
       $('#mic')?.remove();
       setTimeout(()=>speak(it.fr),300);
     }else{
-      detail=`${q.type!=='spell'&&!$('#hint:not(.hide)')?picHtml(im,'m'):''}<div style="margin-top:6px">정답:<b>${info.frOk?esc(it.fr):diffHtml(info.fr,it.fr)}</b> <button class="ib" data-say="${esc(it.fr)}">🔊</button></div>
+      detail=`${q.type!=='spell'&&!$('#hint:not(.hide)')?picHtml(im,'m'):''}<div style="margin-top:6px">정답:<b>${info.frOk?frG(it.fr):diffHtml(info.fr,it.fr)}</b> <button class="ib" data-say="${esc(it.fr)}">🔊</button></div>
         <div>뜻: ${esc(it.ko)}</div>
         <div class="muted" style="margin-top:6px">내 답: ${esc(info.fr)||'(빈칸)'}${q.type==='both'?` / 뜻: ${esc(info.ko)||'(빈칸)'} ${info.koOk?'✓':'✗'}`:''}</div>
         ${info.note?`<div style="margin-top:6px">⚠️ ${info.note}</div>`:''}`;
@@ -762,7 +805,7 @@ function vWrong(){
     ${ws.length?`<div style="margin-top:12px"><button class="btn pri big" id="go">틀린 것만 테스트 (${ws.length})</button></div>`:''}
   </div>
   <div class="card">${ws.length?ws.map(x=>{const w=S.wrong[x.id];return `<div class="item">${thumb(x)}<button class="ib" data-say="${esc(x.fr)}">🔊</button>
-    <div class="t"><div class="fr">${esc(x.fr)}</div><div class="muted">${esc(x.ko)}</div>
+    <div class="t"><div class="fr">${frG(x.fr)}</div><div class="muted">${esc(x.ko)}</div>
     <div class="muted" style="font-size:12px">${w.count}번 틀림 · 연속 정답 ${w.streak||0}/2</div></div>
     <button class="btn sm" data-out="${x.id}">외웠어요</button></div>`}).join(''):'<div class="empty">🎉 오답이 하나도 없어요!</div>'}</div>`;
   const g=$('#go');if(g)g.onclick=()=>startTest(true);
@@ -1188,7 +1231,7 @@ function spDraw(){
     <div class="row" style="justify-content:space-between"><span>⏱️ <b id="sptime">${mmss(d.sec)}</b> / ${c.goalMin}:00</span><span>🗣️ <b id="spreps">${d.reps}</b> / ${c.goalReps}회</span></div>
     <div class="bar" style="margin:6px 0 4px"><i id="spbar" style="width:${Math.min(100,d.sec/(c.goalMin*60)*100)}%;background:var(--good)"></i></div>
     ${picHtml(im,'m')}
-    <div class="big-fr" style="text-align:center">${reveal?esc(it.fr):'👂 · · ·'}</div>${reveal&&it.pron?`<div class="pron big" style="text-align:center">[ ${esc(it.pron)} ]</div>`:''}
+    <div class="big-fr" style="text-align:center">${reveal?frG(it.fr):'👂 · · ·'}</div>${reveal&&it.pron?`<div class="pron big" style="text-align:center">[ ${esc(it.pron)} ]</div>`:''}
     <div class="muted" style="text-align:center">${reveal?esc(it.ko):'문장은 숨겨져 있어요. 소리만 듣고 따라 해보세요'}</div>${reveal&&it.note?`<div class="note" style="text-align:center">💡 ${esc(it.note)}</div>`:''}
     <div class="dots">${Array.from({length:c.reps},(_,i)=>`<i class="${i<SP.rep?'on':i===SP.rep?'cur':''}"></i>`).join('')}</div>
     <div class="phase ${ph[0]}">${ph[1]}</div>
@@ -1236,7 +1279,7 @@ function vSpeak(){
     <label class="f">하루 목표 횟수</label><div class="seg" data-k="goalReps"><button data-v="200">200회</button><button data-v="300">300회</button><button data-v="500">500회</button><button data-v="800">800회</button></div>
   </div>
   <div class="card"><h2>많이 말한 표현 🗣️</h2>
-    ${top.length?top.map(([x,n])=>`<div class="item">${x.pack?`<div class="pic s">${esc(x.img.v)}</div>`:thumb(x)}<div class="t"><div class="fr">${esc(x.fr)}</div><div class="muted">${esc(x.ko)}</div></div><b>${n}번</b></div>`).join(''):'<div class="muted">아직 없어요. 시작하면 표현마다 몇 번 말했는지 쌓여요.</div>'}
+    ${top.length?top.map(([x,n])=>`<div class="item">${x.pack?`<div class="pic s">${esc(x.img.v)}</div>`:thumb(x)}<div class="t"><div class="fr">${frG(x.fr)}</div><div class="muted">${esc(x.ko)}</div></div><b>${n}번</b></div>`).join(''):'<div class="muted">아직 없어요. 시작하면 표현마다 몇 번 말했는지 쌓여요.</div>'}
   </div>`;
   const NUM=new Set(['reps','goalMin','goalReps']);
   const sync=()=>document.querySelectorAll('.seg[data-k]').forEach(s=>s.querySelectorAll('button').forEach(b=>b.classList.toggle('on',String(c[s.dataset.k])===b.dataset.v)));
@@ -1719,7 +1762,7 @@ function packHtml(){
     <div class="chips">${chip('','전체',all)}${P.cats.map(x=>chip(x.name,x.name,x.ids)).join('')}</div>
     <button class="btn pri" id="pkgo" style="width:100%;margin:10px 0 4px">▶ ${esc(c.cat||'전체')} ${ids.length}개 듣고 따라 말하기</button>
     ${ids.map(id=>{const x=PITEMS[id],n=saidTotal(id);return `<div class="item"><div class="pic s">${esc(x.img.v)}</div>
-      <div class="t"><div class="fr">${esc(x.fr)}${n?`<span class="tag">🗣️${n}</span>`:''}</div><div class="pron">${esc(x.pron)}</div><div class="muted">${esc(x.ko)}</div>${x.note?`<div class="note">💡 ${esc(x.note)}</div>`:''}</div>
+      <div class="t"><div class="fr">${frG(x.fr)}${n?`<span class="tag">🗣️${n}</span>`:''}</div><div class="pron">${esc(x.pron)}</div><div class="muted">${esc(x.ko)}</div>${x.note?`<div class="note">💡 ${esc(x.note)}</div>`:''}</div>
       <button class="ib" data-say="${esc(x.fr)}" title="듣기">🔊</button>${mine.has(id)?'<span class="ib" title="내 목록에 있어요 (테스트에도 나와요)">✅</span>':`<button class="ib" data-padd="${id}" title="내 목록에 넣기 (테스트에도 나와요)">＋</button>`}</div>`}).join('')}
     <div class="row" style="margin-top:10px"><button class="btn sm" id="pkadd">＋ 이 ${ids.length}개 모두 내 목록에 넣기 (테스트에도 나와요)</button></div>
   </div>`;
