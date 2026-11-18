@@ -943,12 +943,16 @@ function lnList(){
   }).slice().reverse();
 }
 function lnMark(id){document.querySelectorAll('.ln-row').forEach(b=>{const on=b.dataset.id===id;b.classList.toggle('on',on);b.querySelector('.ln-i').textContent=on?'🔉':'🔊'})}
-function lnStop(){LN.all=false;LN.run++;if(hasTTS)ttsStop();lnMark('');const b=$('#lnall');if(b)b.textContent='▶ 전체 듣기'}
-function lnRate(){return LN.slow?0.72:S.settings.rate}
+const lnAudio=new Audio();lnAudio.preload='none';lnAudio.referrerPolicy='no-referrer';lnAudio.setAttribute('playsinline','');
+function lnStop(){LN.all=false;LN.run++;lnAudio.pause();if(hasTTS)ttsStop();lnMark('');const b=$('#lnall');if(b)b.textContent='▶ 전체 듣기'}
 function lnPlay(x,done){
-  if(!hasTTS){speak(x.fr);return}
-  const run=++LN.run;lnMark(x.id);
-  ttsPlay(x.fr,lnRate(),false,()=>{if(run!==LN.run)return;lnMark('');done&&done()});
+  const run=++LN.run;lnMark(x.id);if(hasTTS)ttsStop();
+  const end=()=>{if(run!==LN.run)return;lnMark('');done&&done()};
+  // 기기 음성은 기계음이 심해서 구글 음성을 먼저 써요. 안 되면 기기 음성으로 읽어요.
+  const fallback=()=>{if(run!==LN.run)return;if(hasTTS)ttsPlay(x.fr,LN.slow?0.72:S.settings.rate,false,end);else{toast('소리를 불러오지 못했어요');end()}};
+  lnAudio.src='https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=fr&q='+encodeURIComponent(x.fr.slice(0,200));
+  lnAudio.playbackRate=LN.slow?0.75:1;lnAudio.onended=end;lnAudio.onerror=fallback;
+  lnAudio.play().catch(fallback);
 }
 function lnAll(){
   if(LN.all){lnStop();return}
@@ -966,12 +970,11 @@ function lnRows(){
 }
 function vListen(){
   if(!voices.length)loadVoices();
-  const v=hasTTS?pickVoice():null,male=v&&V_MALE.test(v.name);
   $('#view').innerHTML=`<div class="card"><div class="ln-top"><h2>듣기 <small class="muted" id="lncount"></small></h2>
     <input type="search" id="lnq" placeholder="불어, 뜻, 발음으로 찾기" value="${esc(LN.q)}" autocomplete="off">
     <div class="chips" style="margin-top:8px">${LN_F.map(([k,l])=>`<button class="chip ${LN.f===k?'on':''}" data-lf="${k}">${l}</button>`).join('')}</div>
     <div class="ln-tools"><button class="btn sm" id="lnall">▶ 전체 듣기</button><button class="btn sm" id="lnslow">${LN.slow?'🐢 천천히 켜짐':'🐢 천천히'}</button></div>
-    <div class="muted" style="font-size:12px;margin-top:6px">${v?`목소리: ${esc(v.name)}${male?'':' · 남성 음성은 📚 목록 > 설정에서 고를 수 있어요'}`:'이 화면에서는 소리가 나오지 않아요'}</div></div>
+    </div>
     <div id="lnrows"></div></div>`;
   lnRows();
   $('#lnq').oninput=e=>{LN.q=e.target.value;lnStop();lnRows()};
