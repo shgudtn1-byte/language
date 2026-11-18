@@ -943,16 +943,24 @@ function lnList(){
   }).slice().reverse();
 }
 function lnMark(id){document.querySelectorAll('.ln-row').forEach(b=>{const on=b.dataset.id===id;b.classList.toggle('on',on);b.querySelector('.ln-i').textContent=on?'🔉':'🔊'})}
-const lnAudio=new Audio();lnAudio.preload='none';lnAudio.referrerPolicy='no-referrer';lnAudio.setAttribute('playsinline','');
+const lnAudio=new Audio();lnAudio.preload='none';lnAudio.setAttribute('playsinline','');
 function lnStop(){LN.all=false;LN.run++;lnAudio.pause();if(hasTTS)ttsStop();lnMark('');const b=$('#lnall');if(b)b.textContent='▶ 전체 듣기'}
+const LN_SILENT='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=',lnCache=new Map();
+async function lnClip(fr){
+  if(lnCache.has(fr))return lnCache.get(fr);
+  const r=await fetch(TR_URL.replace(/\/translate$/,'/say')+'?q='+encodeURIComponent(fr.slice(0,200)),{headers:{'X-Sync-Token':SYNC.token}});
+  if(!r.ok)throw new Error(String(r.status));
+  const u=URL.createObjectURL(await r.blob());lnCache.set(fr,u);return u;
+}
 function lnPlay(x,done){
   const run=++LN.run;lnMark(x.id);if(hasTTS)ttsStop();
   const end=()=>{if(run!==LN.run)return;lnMark('');done&&done()};
-  // 기기 음성은 기계음이 심해서 구글 음성을 먼저 써요. 안 되면 기기 음성으로 읽어요.
+  // 기기 음성은 기계음이 심해서 서버 음성을 먼저 써요. 안 되면 기기 음성으로 읽어요.
   const fallback=()=>{if(run!==LN.run)return;if(hasTTS)ttsPlay(x.fr,LN.slow?0.72:S.settings.rate,false,end);else{toast('소리를 불러오지 못했어요');end()}};
-  lnAudio.src='https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=fr&q='+encodeURIComponent(x.fr.slice(0,200));
-  lnAudio.playbackRate=LN.slow?0.75:1;lnAudio.onended=end;lnAudio.onerror=fallback;
-  lnAudio.play().catch(fallback);
+  if(!syncOn())return fallback();
+  // 아이폰은 누른 순간에 재생을 시작해야 해서, 빈 소리로 먼저 열어 둬요.
+  lnAudio.onended=lnAudio.onerror=null;lnAudio.src=LN_SILENT;lnAudio.play().catch(()=>{});
+  lnClip(x.fr).then(u=>{if(run!==LN.run)return;lnAudio.onended=end;lnAudio.onerror=fallback;lnAudio.src=u;lnAudio.playbackRate=LN.slow?0.75:1;return lnAudio.play()}).catch(fallback);
 }
 function lnAll(){
   if(LN.all){lnStop();return}
