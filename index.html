@@ -177,13 +177,13 @@ function seed(){
       mk('la monnaie','잔돈',t,'🪙🪙💵'),
     ],
     wrong:{}, log:{},
-    settings:{strict:false,rate:0.9,voice:'',types:{spell:true,dict:true,both:true,speak:true}}
+    settings:{strict:false,rate:0.95,voice:'',types:{spell:true,dict:true,both:true,speak:true}}
   };
 }
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&Array.isArray(d.items))return d}catch(e){}return seed()}
 function save(){if(typeof onSaved==='function')onSaved();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 let S=load();
-function fix(){S.items.forEach(x=>{if(!x.pack&&!/^p[swgcbvh]\d{3}$/.test(x.id))x.kind=kindOf(x.fr)});S.todos=S.todos||{};S.diary=S.diary||{};S.history=S.history||[];S.settings=S.settings||{};S.wrong=S.wrong||{};S.log=S.log||{};S.stamp=S.stamp||{};S.speak=S.speak||{};
+function fix(){S.settings=S.settings||{};if(S.settings.voiceV!==2){S.settings.voiceV=2;S.settings.voice='';if(S.settings.rate===0.9)S.settings.rate=0.95}S.items.forEach(x=>{if(!x.pack&&!/^p[swgcbvh]\d{3}$/.test(x.id))x.kind=kindOf(x.fr)});S.todos=S.todos||{};S.diary=S.diary||{};S.history=S.history||[];S.settings=S.settings||{};S.wrong=S.wrong||{};S.log=S.log||{};S.stamp=S.stamp||{};S.speak=S.speak||{};
   S.settings.wtypes=Object.assign({say:true,speak:true,spell:false,dict:false},S.settings.wtypes||{});S.settings.sp=Object.assign({goalMin:60,goalReps:300,reps:5,pause:'mid',mode:(window.SpeechRecognition||window.webkitSpeechRecognition)?'mic':'auto',show:'text',scope:'least',slowFirst:true,pk:'s',cat:'👋 인사'},S.settings.sp||{})}
 fix();
 
@@ -236,7 +236,44 @@ function similarity(a,b){
 // ---------- 음성 ----------
 const hasTTS='speechSynthesis' in window;
 let voices=[];
-function loadVoices(){if(!hasTTS)return;voices=speechSynthesis.getVoices().filter(v=>/^fr/i.test(v.lang))}
+// 🔊 가장 사람 같은 남성 불어 음성을 골라요 (기기에 있는 음성 안에서)
+const V_TOY=/^(Eddy|Flo|Grandma|Grandpa|Reed|Rocko|Sandy|Shelley|Albert|Bad News|Bahh|Bells|Boing|Bubbles|Cellos|Good News|Jester|Organ|Superstar|Trinoids|Whisper|Wobble|Zarvox)\b/i;
+const V_MALE=/(^|[\s-])(Henri|R[ée]my|Antoine|Jean|Fabrice|Thomas|Jacques|Daniel|Nicolas|Paul|Claude|Guillaume|Alain|Yves|Olivier|Maurice|Tristan|Lucien|G[ée]rard|Bernard|Sylvain|Mathieu|Julien|Louis|Hugo)([\s(-]|$)/i;
+const V_FEMALE=/(^|[\s-])(Audrey|Aude|Am[ée]lie|Marie|Denise|Elo[ïi]se|Vivienne|Julie|Hortense|Sylvie|Ariane|Charline|Coralie|Jos[ée]phine|Brigitte|C[ée]leste|Yvette|Th[ée]r[èe]se|Virginie|Chantal|Caroline|Harmonie|Sylvie|Google)([\s(-]|$)/i;
+function vScore(v){
+  const n=v.name;if(V_TOY.test(n))return -500;
+  let s=V_MALE.test(n)?100:V_FEMALE.test(n)?0:40;
+  if(/natural|neural/i.test(n))s+=40;else if(/premium/i.test(n))s+=35;else if(/enhanced|am[ée]lior/i.test(n))s+=30;else if(/online|network|google/i.test(n))s+=20;
+  if(/fr[-_]FR/i.test(v.lang))s+=6;else if(/fr[-_]CI/i.test(v.lang))s+=5;else if(/fr[-_](BE|CH)/i.test(v.lang))s+=2;
+  if(/^Thomas/i.test(n))s+=2;
+  return s;
+}
+function loadVoices(){if(!hasTTS)return;voices=speechSynthesis.getVoices().filter(v=>/^fr/i.test(v.lang)).sort((a,b)=>vScore(b)-vScore(a))}
+const pickVoice=()=>voices.find(v=>v.name===S.settings.voice)||voices[0];
+var ttsRun=0;
+function ttsStop(){ttsRun++;try{speechSynthesis.cancel()}catch(_){}}
+// 긴 문장은 문장부호에서 나눠 읽어요 (긴 글에서 소리가 끊기는 브라우저 문제도 막아요)
+function ttsParts(t){
+  t=String(t).trim();if(t.length<=160)return [t];
+  const out=[];let cur='';
+  const add=x=>{if(cur&&(cur+x).length>160){out.push(cur.trim());cur=''}cur+=x};
+  (t.match(/[^.!?;:]+[.!?;:]*\s*/g)||[t]).forEach(x=>{if(x.length>160)(x.match(/[^,]+,?\s*/g)||[x]).forEach(add);else add(x)});
+  if(cur.trim())out.push(cur.trim());return out;
+}
+function ttsPlay(text,rate,who,done){
+  if(!voices.length)loadVoices();
+  ttsStop();const run=ttsRun,parts=ttsParts(text),v=pickVoice();
+  const v2=who?voices.find(x=>x!==v&&vScore(x)>=0):null;let i=0;
+  const next=()=>{
+    if(run!==ttsRun)return done&&done();
+    if(i>=parts.length)return done&&done();
+    const u=new SpeechSynthesisUtterance(parts[i]);u.lang='fr-FR';const use=who?(v2||v):v;
+    if(use){u.voice=use;u.lang=use.lang}
+    if(who&&!v2)u.pitch=1.15;u.rate=rate;u.onend=()=>{i++;next()};u.onerror=()=>{i=parts.length;next()};
+    if(i===0)ttsGuard(u);speechSynthesis.speak(u);
+  };
+  next();
+}
 if(hasTTS){loadVoices();speechSynthesis.onvoiceschanged=()=>{loadVoices();if(tab==='list')render()}}
 // 소리가 안 날 때: 음성 목록 다시 읽기 + 멈춘 엔진 깨우기 + 2.5초 안에 시작 안 하면 안내
 let ttsWarned=false;
@@ -249,12 +286,7 @@ function ttsGuard(u){
 }
 function speak(text,slow){
   if(!hasTTS){toast('이 화면에서는 소리가 안 나와요. 맨 위 안내대로 Chrome으로 열어 주세요',4000);window.scrollTo(0,0);return}
-  speechSynthesis.cancel();
-  const u=new SpeechSynthesisUtterance(text);u.lang='fr-FR';
-  const v=voices.find(v=>v.name===S.settings.voice)||voices.find(v=>/fr[-_]CI/i.test(v.lang))||voices.find(v=>/fr[-_]FR/i.test(v.lang))||voices[0];
-  if(v){u.voice=v;u.lang=v.lang}
-  u.rate=slow?0.55:S.settings.rate;
-  ttsGuard(u);speechSynthesis.speak(u);
+  ttsPlay(text,slow?0.72:S.settings.rate,false);
 }
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 
@@ -362,7 +394,7 @@ function renderNav(){
 $('#nav').onclick=e=>{const b=e.target.closest('[data-tab]');if(!b)return;if(T&&!T.done&&!confirm('테스트를 그만둘까요? 지금까지 결과는 저장돼요.'))return;T=null;go(b.dataset.tab)};
 function go(t){
   if(t!=='speak'&&typeof SP!=='undefined'&&SP)spEnd();
-  if(t!=='test'&&typeof L!=='undefined'&&L){L=null;if(hasTTS)speechSynthesis.cancel()}
+  if(t!=='test'&&typeof L!=='undefined'&&L){L=null;if(hasTTS)ttsStop()}
   if(t!=='admin'&&location.hash==='#admin'){try{history.replaceState(null,'',location.pathname+location.search)}catch(_){}}
   tab=t;render();scrollTo(0,0);
 }
@@ -757,7 +789,7 @@ function vQuestion(){
       mic.onclick=()=>{
         if(T.answered)return;
         if(rec){rec.stop();return}
-        speechSynthesis?.cancel();
+        ttsStop();
         rec=new SR();rec.lang='fr-FR';rec.interimResults=true;rec.maxAlternatives=3;
         let best='';
         rec.onresult=e=>{const r=e.results[e.results.length-1];best=r[0].transcript;
@@ -868,7 +900,7 @@ function vList(){
   </div>
   <div class="card"><h2>설정</h2>
     <label class="f">불어 목소리</label>
-    <select id="voice"><option value="">자동 (fr-CI → fr-FR)</option>${voices.map(v=>`<option ${v.name===st.voice?'selected':''} value="${esc(v.name)}">${esc(v.name)} (${esc(v.lang)})</option>`).join('')}</select>
+    <select id="voice"><option value="">자동 (가장 자연스러운 남성 음성)</option>${voices.map(v=>`<option ${v.name===st.voice?'selected':''} value="${esc(v.name)}">${esc(v.name)} (${esc(v.lang)})</option>`).join('')}</select>
     <label class="f">말하기 속도: <span id="rv">${st.rate}</span></label>
     <input type="range" id="rate" min="0.5" max="1.2" step="0.05" value="${st.rate}" style="width:100%">
     <label class="opts" style="margin-top:10px"><label><input type="checkbox" id="strict" ${st.strict?'checked':''}><span><b>악센트까지 엄격하게 채점</b><small>끄면 é/e 차이는 맞음 + 경고로 처리해요</small></span></label></label>
@@ -1129,17 +1161,10 @@ function speakP(text,slow,who){
   return new Promise(res=>{
     const t0=Date.now();
     if(!hasTTS){setTimeout(()=>res(1500),1500);return}
-    speechSynthesis.cancel();
-    const u=new SpeechSynthesisUtterance(text);u.lang='fr-FR';
-    const v=voices.find(v=>v.name===S.settings.voice)||voices.find(v=>/fr[-_]CI/i.test(v.lang))||voices.find(v=>/fr[-_]FR/i.test(v.lang))||voices[0];
-    if(v){u.voice=v;u.lang=v.lang}
-    if(who){const v2=voices.find(x=>x!==v&&/fr[-_]FR/i.test(x.lang))||voices.find(x=>x!==v);if(v2){u.voice=v2;u.lang=v2.lang}else u.pitch=1.4} // 대화의 두 번째 사람은 다른 목소리
-    u.rate=slow?0.6:S.settings.rate;
     let done=false;
     const fin=()=>{if(done)return;done=true;clearTimeout(t);res(Math.max(800,Date.now()-t0))};
-    u.onend=fin;u.onerror=fin;
-    const t=setTimeout(fin,text.length*(slow?170:110)+4000);
-    ttsGuard(u);speechSynthesis.speak(u);
+    const t=setTimeout(fin,text.length*(slow?150:110)+4000);
+    ttsPlay(text,slow?0.72:S.settings.rate,who,fin);
   });
 }
 // 내 목소리를 듣고 문장과 얼마나 비슷한지 확인해요
@@ -1201,7 +1226,7 @@ function spSecond(){
 function spAdvance(){SP.rep=0;SP.qi++;if(SP.qi>=SP.queue.length){SP.queue=spQueue();SP.qi=0}}
 function spInterrupt(){
   if(!SP)return;SP.token=(SP.token||0)+1;
-  if(hasTTS)speechSynthesis.cancel();
+  if(hasTTS)ttsStop();
   try{SP.rec&&SP.rec.abort()}catch(_){}
   SP.wake&&SP.wake();
 }
@@ -2276,7 +2301,7 @@ function lDraw(){
   </div>`;
   $('#lplay').onclick=()=>lPlay(false);$('#lslow').onclick=()=>lPlay(true);
   document.querySelectorAll('.lopt').forEach(b=>b.onclick=()=>{
-    if(L.picked!==null)return;L.picked=q.opts[+b.dataset.o];L.play++;if(hasTTS)speechSynthesis.cancel();
+    if(L.picked!==null)return;L.picked=q.opts[+b.dataset.o];L.play++;if(hasTTS)ttsStop();
     L.res.push({t:q.t,ok:L.picked===q.ans,id:q.id});lDraw();
   });
   const nx=$('#lnext');if(nx)nx.onclick=()=>{if(L.i+1<L.qs.length){L.i++;L.picked=null;lDraw();scrollTo(0,0);setTimeout(()=>lPlay(false),250)}else lEnd()};
