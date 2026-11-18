@@ -421,6 +421,10 @@ function vAdd(){
   const todays=S.items.filter(x=>x.added===today()).reverse();
   $('#view').innerHTML=`
   <div class="card"><h2>오늘 배운 것 저장 ✏️</h2>
+    <label class="f">🇰🇷 하고 싶은 말을 한국말로 <span class="muted" style="font-size:12px">(불어를 모를 때)</span></label>
+    <textarea id="kr" maxlength="300" style="min-height:52px" placeholder="예: 물 한 잔만 주실 수 있을까요?"></textarea>
+    <button class="btn sm" id="krgo" style="margin-top:6px;width:100%">🇫🇷 자연스러운 불어로 바꾸기</button>
+    <div id="krout"></div>
     <label class="f">불어 (단어 또는 문장) <span id="gbadge"></span></label>
     <textarea id="fr" data-fr placeholder="예: Je suis coréen et j'habite à Abidjan."></textarea>
     ${accBar()}
@@ -446,6 +450,8 @@ function vAdd(){
   fr.addEventListener('input',()=>{frTint(fr);clearTimeout(lk.t);lk.t=setTimeout(()=>autoLook(fr,ko,prev),700)});
   fr.addEventListener('blur',()=>{if(fr.value.trim()!==lk.done){clearTimeout(lk.t);autoLook(fr,ko,prev)}});
   ko.addEventListener('input',()=>{lk.auto=''});
+  $('#krgo').onclick=()=>krTranslate(fr,ko,prev);
+  $('#kr').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();krTranslate(fr,ko,prev)}};
   $('#pick').onclick=()=>openPicker(fr.value.trim()||'(불어)',ko.value.trim()||'(뜻)',draftImg,v=>{draftImg=v;prev()});
   prev();
   $('#pv').onclick=()=>fr.value.trim()?speak(fr.value.trim()):toast('불어를 먼저 입력하세요');
@@ -453,6 +459,7 @@ function vAdd(){
     const f=fr.value.trim(),k=ko.value.trim();
     if(!f||!k){toast('불어와 뜻을 모두 입력하세요');return}
     const it={id:uid(),fr:f,ko:k,kind:kindOf(f),added:today(),right:0,wrong:0};lk.done='';lk.auto='';
+    if(krPick&&krPick.fr===f){it.pron=krPick.pron;it.note=krPick.note}krPick=null;
     if(draftImg)it.img=draftImg;draftImg=null;
     S.items.push(it);
     save();toast('저장했어요 ✓');vAdd();renderNav();$('#fr').focus();
@@ -460,6 +467,41 @@ function vAdd(){
   $('#sv').onclick=doSave;
   [fr,ko].forEach(el=>el.onkeydown=e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();doSave()}else if(e.key==='Enter'&&el===ko){e.preventDefault();doSave()}});
   bindRows();
+}
+// ---------- 🇰🇷 → 🇫🇷 하고 싶은 말을 실전 불어로 ----------
+// 동기화 토큰이 있는 기기만 Claude 번역을 써요. 안 되면 Google 기본 번역을 '직역'이라고 알리고 보여 줘요.
+const TR_URL='https://french-glasses.french-glasses-worker.workers.dev/translate';
+var krPick=null,krSeq=0;
+async function gtransKoFr(q){
+  try{const j=await (await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=ko&tl=fr&dt=t&q='+encodeURIComponent(q))).json();return (j[0]||[]).map(x=>x[0]).join('').trim()}catch(_){return ''}
+}
+async function krTranslate(fr,ko,prev){
+  const text=$('#kr').value.trim(),O=$('#krout'),B=$('#krgo'),seq=++krSeq;
+  if(!text){toast('하고 싶은 말을 한국말로 적어 주세요');return}
+  B.disabled=true;B.textContent='🔎 표현 찾는 중…';O.innerHTML='';
+  let opts=null,why='';
+  if(syncOn()){
+    try{
+      const r=await fetch(TR_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Sync-Token':SYNC.token},body:JSON.stringify({text})});
+      if(r.ok)opts=(await r.json()).options;else why=r.status===401?'동기화 토큰을 확인하지 못했어요.':'번역 서버가 지금 응답하지 않아요.';
+    }catch(_){why='번역 서버에 연결하지 못했어요.'}
+  }else why='☁️ 동기화를 연결하면 실생활 표현으로 바꿔 드려요.';
+  if(seq!==krSeq||!$('#krout'))return;
+  B.disabled=false;B.textContent='🇫🇷 자연스러운 불어로 바꾸기';
+  let warn='';
+  if(!opts||!opts.length){
+    const g=await gtransKoFr(text);if(seq!==krSeq||!$('#krout'))return;
+    if(!g){O.innerHTML=`<div class="muted" style="font-size:13px;margin-top:6px">불어로 바꾸지 못했어요. 인터넷 연결을 확인해 주세요.</div>`;return}
+    opts=[{tone:'기본 번역',fr:g,pron:'',back:text,note:''}];
+    warn=`<div class="muted" style="font-size:12px;margin-top:6px">⚠️ 직역일 수 있어요. ${esc(why)}</div>`;
+  }
+  O.innerHTML=warn+opts.map((o,i)=>`<div class="item" style="align-items:flex-start"><div class="t"><span class="tag" style="margin-left:0">${esc(o.tone)}</span><div class="fr" style="margin-top:3px">${esc(o.fr)}</div>${o.pron?`<div class="pron">${esc(o.pron)}</div>`:''}<div class="muted">${esc(o.back)}</div>${o.note?`<div class="note">💡 ${esc(o.note)}</div>`:''}</div>
+    <button class="ib" data-say="${esc(o.fr)}" title="듣기">🔊</button><button class="btn sm" data-kr="${i}">쓰기</button></div>`).join('');
+  O.querySelectorAll('[data-kr]').forEach(b=>b.onclick=()=>{
+    const o=opts[+b.dataset.kr];krPick=o;clearTimeout(lk.t);lk.seq++;fr.value=o.fr;lk.done=o.fr;ko.value=text;lk.auto='';
+    $('#art').innerHTML='';$('#kosug').innerHTML='';frTint(fr);prev();
+    O.querySelectorAll('[data-kr]').forEach(x=>{x.textContent=x===b?'✓ 선택':'쓰기';x.classList.toggle('pri',x===b)});
+  });
 }
 // ---------- 🔎 자동 뜻 찾기 + 정관사 ----------
 // 뜻: 앱 안 표현 → Google 번역 → 위키낱말사전(fr.wiktionary)의 한국어 번역
