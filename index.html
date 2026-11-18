@@ -57,6 +57,13 @@ label.f{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
 .seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .seg button{flex:1;font:inherit;padding:9px;border:0;background:var(--card);color:var(--ink);cursor:pointer}
 .seg.wrap{flex-wrap:wrap}.seg.wrap button{flex:1 1 30%}
+.ln-top{position:sticky;top:0;z-index:3;background:var(--card);padding-bottom:8px}
+.ln-tools{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.ln-row{display:flex;width:100%;gap:12px;align-items:center;text-align:left;font:inherit;color:var(--ink);background:none;border:0;border-top:1px solid var(--line);padding:13px 4px;cursor:pointer}
+.ln-row .ln-t{flex:1;min-width:0}.ln-row .ln-fr{font-size:18px;font-weight:600;line-height:1.3}
+.ln-row .ln-p{font-size:13px;color:var(--muted);margin-top:2px}.ln-row .ln-k{font-size:14px;margin-top:2px}
+.ln-row .ln-i{font-size:24px;flex:none}.ln-row.on{background:var(--good-soft)}
+nav button{min-width:0}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{font:inherit;font-size:13px;padding:6px 10px;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--ink);cursor:pointer}
 .chip small{color:var(--muted)}
@@ -274,7 +281,7 @@ function ttsPlay(text,rate,who,done){
   };
   next();
 }
-if(hasTTS){loadVoices();speechSynthesis.onvoiceschanged=()=>{loadVoices();if(tab==='list')render()}}
+if(hasTTS){loadVoices();speechSynthesis.onvoiceschanged=()=>{loadVoices();if(tab==='list')render();else if(tab==='listen'&&!LN.all&&document.activeElement?.id!=='lnq')vListen()}}
 // 소리가 안 날 때: 음성 목록 다시 읽기 + 멈춘 엔진 깨우기 + 2.5초 안에 시작 안 하면 안내
 let ttsWarned=false;
 function ttsGuard(u){
@@ -385,8 +392,8 @@ document.addEventListener('click',e=>{
 });
 
 // ---------- 내비 ----------
-let tab='home';
-const TABS=[['home','🏠','오늘'],['add','✏️','저장'],['speak','🎧','스피킹'],['test','📝','테스트'],['wrong','📕','오답노트'],['list','📚','목록']];
+let tab=location.hash==='#listen'?'listen':'home';
+const TABS=[['home','🏠','오늘'],['add','✏️','저장'],['speak','🎧','스피킹'],['listen','🔊','듣기'],['test','📝','테스트'],['wrong','📕','오답노트'],['list','📚','목록']];
 function renderNav(){
   const wc=Object.keys(S.wrong).filter(byId).length;
   $('#nav').innerHTML=TABS.map(([k,i,l])=>`<button class="${tab===k?'on':''}" data-tab="${k}"><b>${i}</b><span>${l}${k==='wrong'&&wc?`<span class="badge">${wc}</span>`:''}</span></button>`).join('');
@@ -394,6 +401,7 @@ function renderNav(){
 $('#nav').onclick=e=>{const b=e.target.closest('[data-tab]');if(!b)return;if(T&&!T.done&&!confirm('테스트를 그만둘까요? 지금까지 결과는 저장돼요.'))return;T=null;go(b.dataset.tab)};
 function go(t){
   if(t!=='speak'&&typeof SP!=='undefined'&&SP)spEnd();
+  if(tab==='listen'&&t!=='listen')lnStop();
   if(t!=='test'&&typeof L!=='undefined'&&L){L=null;if(hasTTS)ttsStop()}
   if(t!=='admin'&&location.hash==='#admin'){try{history.replaceState(null,'',location.pathname+location.search)}catch(_){}}
   tab=t;render();scrollTo(0,0);
@@ -402,7 +410,7 @@ function render(){
   const d=new Date();$('#sub').textContent=`${d.getMonth()+1}월 ${d.getDate()}일 · ${isMorning()?'좋은 아침이에요 ☀️':'오늘 하루 수고했어요 🌙'}`;
   renderNav();
   $('#adm').textContent=adminOk?'🔓 관리자':'🔒 관리자';
-  ({home:vHome,add:vAdd,speak:vSpeak,test:vTest,wrong:vWrong,list:vList,admin:vAdmin})[tab]();
+  ({home:vHome,add:vAdd,speak:vSpeak,listen:vListen,test:vTest,wrong:vWrong,list:vList,admin:vAdmin})[tab]();
   if(typeof setSync==='function'&&syncState)setSync(syncState);
 }
 
@@ -921,6 +929,59 @@ function vList(){
   $('#file').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{const d=JSON.parse(t);if(!Array.isArray(d.items))throw 0;if(confirm(`${d.items.length}개 표현으로 덮어쓸까요?`)){S=d;fix();save();render();toast('불러왔어요')}}catch(_){toast('올바른 백업 파일이 아니에요')}})};
 }
 
+// ---------- 🔊 듣기: 찾아서 한 번 누르면 바로 재생 ----------
+var LN={q:'',f:'all',slow:false,all:false,run:0};
+const lnKey=t=>String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[’`]/g,"'");
+const LN_F=[['all','전체'],['new','최근 7일'],['단어','단어'],['문장','문장'],['wrong','틀린 것']];
+function lnList(){
+  const q=lnKey(LN.q).trim(),from=daysAgo(7);
+  return S.items.filter(x=>{
+    if(LN.f==='new'&&x.added<from)return false;
+    if(LN.f==='wrong'&&!S.wrong[x.id])return false;
+    if((LN.f==='단어'||LN.f==='문장')&&x.kind!==LN.f)return false;
+    return !q||lnKey(x.fr+' '+x.ko+' '+(x.pron||'')).includes(q);
+  }).slice().reverse();
+}
+function lnMark(id){document.querySelectorAll('.ln-row').forEach(b=>{const on=b.dataset.id===id;b.classList.toggle('on',on);b.querySelector('.ln-i').textContent=on?'🔉':'🔊'})}
+function lnStop(){LN.all=false;LN.run++;if(hasTTS)ttsStop();lnMark('');const b=$('#lnall');if(b)b.textContent='▶ 전체 듣기'}
+function lnRate(){return LN.slow?0.72:S.settings.rate}
+function lnPlay(x,done){
+  if(!hasTTS){speak(x.fr);return}
+  const run=++LN.run;lnMark(x.id);
+  ttsPlay(x.fr,lnRate(),false,()=>{if(run!==LN.run)return;lnMark('');done&&done()});
+}
+function lnAll(){
+  if(LN.all){lnStop();return}
+  const list=lnList();if(!list.length)return;
+  LN.all=true;$('#lnall').textContent='■ 멈추기';let i=0;
+  const next=()=>{if(!LN.all)return;if(i>=list.length){lnStop();return}
+    const x=list[i++];lnPlay(x,()=>{const run=LN.run;setTimeout(()=>{if(LN.all&&run===LN.run)next()},900)});
+    const el=document.querySelector(`.ln-row[data-id="${CSS.escape(x.id)}"]`);if(el)el.scrollIntoView({block:'center',behavior:'smooth'})};
+  next();
+}
+function lnRows(){
+  const list=lnList(),shown=list.slice(0,300);
+  $('#lncount').textContent=list.length+'개';
+  $('#lnrows').innerHTML=shown.length?shown.map(x=>`<button class="ln-row" data-id="${esc(x.id)}"><span class="ln-t"><div class="ln-fr">${frG(x.fr)}</div>${x.pron?`<div class="ln-p">${esc(x.pron)}</div>`:''}<div class="ln-k">${esc(x.ko)}</div></span><span class="ln-i">🔊</span></button>`).join('')+(list.length>300?'<div class="muted" style="padding:10px 4px">앞의 300개만 보여요. 검색으로 찾아 주세요.</div>':''):'<div class="empty">찾는 표현이 없어요</div>';
+}
+function vListen(){
+  if(!voices.length)loadVoices();
+  const v=hasTTS?pickVoice():null,male=v&&V_MALE.test(v.name);
+  $('#view').innerHTML=`<div class="card"><div class="ln-top"><h2>듣기 <small class="muted" id="lncount"></small></h2>
+    <input type="search" id="lnq" placeholder="불어, 뜻, 발음으로 찾기" value="${esc(LN.q)}" autocomplete="off">
+    <div class="chips" style="margin-top:8px">${LN_F.map(([k,l])=>`<button class="chip ${LN.f===k?'on':''}" data-lf="${k}">${l}</button>`).join('')}</div>
+    <div class="ln-tools"><button class="btn sm" id="lnall">▶ 전체 듣기</button><button class="btn sm" id="lnslow">${LN.slow?'🐢 천천히 켜짐':'🐢 천천히'}</button></div>
+    <div class="muted" style="font-size:12px;margin-top:6px">${v?`목소리: ${esc(v.name)}${male?'':' · 남성 음성은 📚 목록 > 설정에서 고를 수 있어요'}`:'이 화면에서는 소리가 나오지 않아요'}</div></div>
+    <div id="lnrows"></div></div>`;
+  lnRows();
+  $('#lnq').oninput=e=>{LN.q=e.target.value;lnStop();lnRows()};
+  document.querySelectorAll('[data-lf]').forEach(b=>b.onclick=()=>{LN.f=b.dataset.lf;lnStop();vListen()});
+  $('#lnslow').onclick=()=>{LN.slow=!LN.slow;$('#lnslow').textContent=LN.slow?'🐢 천천히 켜짐':'🐢 천천히'};
+  $('#lnall').onclick=lnAll;
+  $('#lnrows').onclick=e=>{const b=e.target.closest('.ln-row');if(!b)return;const x=S.items.find(i=>i.id===b.dataset.id);if(!x)return;
+    const same=b.classList.contains('on');LN.all=false;$('#lnall').textContent='▶ 전체 듣기';if(same){lnStop();return}lnPlay(x)};
+}
+
 // ---------- 관리자: 나의 모든 기록 ----------
 // 주의: 화면 잠금용 비밀번호예요. 파일/브라우저 저장소를 직접 열면 내용을 볼 수 있어요.
 const fnv=s=>{let h=2166136261;for(const c of String(s)){h^=c.codePointAt(0);h=Math.imul(h,16777619)>>>0}return h.toString(16)};
@@ -940,7 +1001,7 @@ $('#adm').onclick=e=>{
   try{history.replaceState(null,'','#admin')}catch(_){}
   go('admin');
 };
-window.addEventListener('hashchange',()=>{if(location.hash==='#admin'&&!(T&&!T.done)){tab='admin';render()}});
+window.addEventListener('hashchange',()=>{if(T&&!T.done)return;if(location.hash==='#admin'){tab='admin';render()}else if(location.hash==='#listen')go('listen')});
 
 function exportData(){
   const a=document.createElement('a');
