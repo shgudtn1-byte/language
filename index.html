@@ -266,7 +266,40 @@ function vScore(v){
 function loadVoices(){if(!hasTTS)return;voices=speechSynthesis.getVoices().filter(v=>/^fr/i.test(v.lang)).sort((a,b)=>vScore(b)-vScore(a))}
 const pickVoice=()=>voices.find(v=>v.name===S.settings.voice)||voices[0];
 var ttsRun=0;
-function ttsStop(){ttsRun++;try{speechSynthesis.cancel()}catch(_){}}
+// 🔊 앱의 모든 소리: 서버 음성을 먼저 쓰고, 안 되면 기기 음성으로 읽어요.
+// 아이폰 무음 모드에서는 기기 음성(speechSynthesis)이 안 나오지만 오디오 재생은 나와요.
+const lnAudio=new Audio();lnAudio.preload='none';lnAudio.setAttribute('playsinline','');
+const LN_SILENT='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=',lnCache=new Map();
+async function lnClip(fr){
+  if(lnCache.has(fr))return lnCache.get(fr);
+  const c=new AbortController(),t=setTimeout(()=>c.abort(),9000);
+  try{
+    const r=await fetch(TR_URL.replace(/\/translate$/,'/say')+'?q='+encodeURIComponent(fr.slice(0,200)),{headers:{'X-Sync-Token':SYNC.token},signal:c.signal});
+    if(!r.ok)throw new Error(String(r.status));
+    const u=URL.createObjectURL(await r.blob());lnCache.set(fr,u);return u;
+  }finally{clearTimeout(t)}
+}
+var SV={run:0,done:null};
+function ttsStop(){
+  SV.run++;ttsRun++;try{lnAudio.pause();lnAudio.onended=lnAudio.onerror=null}catch(_){}
+  try{if(speechSynthesis.speaking||speechSynthesis.pending)speechSynthesis.cancel()}catch(_){}
+  const d=SV.done;SV.done=null;if(d)d();
+}
+function svPlay(text,rate,who,done,fail){
+  ttsStop();const run=SV.run,parts=ttsParts(text);let i=0;SV.done=done||null;
+  const keep=!who;lnAudio.preservesPitch=keep;lnAudio.webkitPreservesPitch=keep;
+  // 아이폰은 누른 순간에 재생을 시작해야 해서, 빈 소리로 먼저 열어 둬요.
+  lnAudio.src=LN_SILENT;lnAudio.play().catch(()=>{});
+  const finish=()=>{const d=SV.done;SV.done=null;if(d)d()};
+  const bad=()=>{if(run!==SV.run)return;lnAudio.onended=lnAudio.onerror=null;SV.done=null;fail&&fail()};
+  const step=()=>{
+    if(run!==SV.run)return;if(i>=parts.length)return finish();
+    lnClip(parts[i]).then(u=>{if(run!==SV.run)return;lnAudio.onended=()=>{i++;step()};lnAudio.onerror=bad;lnAudio.src=u;lnAudio.playbackRate=who?rate*0.92:rate;return lnAudio.play()}).catch(bad);
+  };
+  step();
+}
+const svRate=slow=>slow?0.75:Math.min(1.25,Math.max(0.7,(S.settings.rate||0.95)/0.95));
+document.addEventListener('click',()=>{if(!lnAudio.getAttribute('src')){lnAudio.src=LN_SILENT;lnAudio.play().catch(()=>{})}},{capture:true,once:true});
 // 긴 문장은 문장부호에서 나눠 읽어요 (긴 글에서 소리가 끊기는 브라우저 문제도 막아요)
 function ttsParts(t){
   t=String(t).trim();if(t.length<=160)return [t];
@@ -300,6 +333,10 @@ function ttsGuard(u){
     toast(voices.length?'소리가 안 나오면 컴퓨터 볼륨·음소거와 브라우저 탭 음소거를 확인해 주세요':'이 컴퓨터에 프랑스어 음성이 없어요. Chrome이나 Edge로 열거나, 컴퓨터 설정에서 프랑스어 음성을 설치해 주세요',6000)},2500);
 }
 function speak(text,slow){
+  if(syncOn())return svPlay(text,svRate(slow),false,null,()=>deviceSpeak(text,slow));
+  deviceSpeak(text,slow);
+}
+function deviceSpeak(text,slow){
   if(!hasTTS){toast('이 화면에서는 소리가 안 나와요. 맨 위 안내대로 Chrome으로 열어 주세요',4000);window.scrollTo(0,0);return}
   ttsPlay(text,slow?0.72:S.settings.rate,false);
 }
@@ -410,7 +447,7 @@ $('#nav').onclick=e=>{const b=e.target.closest('[data-tab]');if(!b)return;if(T&&
 function go(t){
   if(t!=='speak'&&typeof SP!=='undefined'&&SP)spEnd();
   if(tab==='listen'&&t!=='listen')lnStop();
-  if(t!=='test'&&typeof L!=='undefined'&&L){L=null;if(hasTTS)ttsStop()}
+  if(t!=='test'&&typeof L!=='undefined'&&L){L=null;ttsStop()}
   if(t!=='admin'&&location.hash==='#admin'){try{history.replaceState(null,'',location.pathname+location.search)}catch(_){}}
   tab=t;render();scrollTo(0,0);
 }
@@ -905,13 +942,14 @@ function vWrong(){
 
 // ---------- 목록 + 설정 ----------
 let q='';
+const vNow=()=>syncOn()?'서버 음성 (듣기 탭과 같은 목소리)':(pickVoice()?.name||'기기 기본 음성');
 function vList(){
   const list=S.items.filter(x=>!q||(x.fr+' '+x.ko).toLowerCase().includes(q.toLowerCase())).slice().reverse();
   const st=S.settings;
   $('#view').innerHTML=`
   <div class="card" id="voicecard"><h2>🔊 불어 목소리</h2>
-    <div class="muted" style="margin-bottom:8px">지금 쓰는 목소리: <b id="vnow">${esc(pickVoice()?.name||'기기 기본 음성')}</b></div>
-    <select id="voice"><option value="">자동 (가장 자연스러운 남성 음성)</option>${voices.filter(v=>vScore(v)>=0||v.name===st.voice).map(v=>`<option ${v.name===st.voice?'selected':''} value="${esc(v.name)}">${esc(v.name)} (${esc(v.lang)})</option>`).join('')}</select>
+    <div class="muted" style="margin-bottom:8px">지금 쓰는 목소리: <b id="vnow">${vNow()}</b></div>
+    <label class="f">서버 음성이 안 될 때 쓸 기기 음성</label><select id="voice"><option value="">자동 (가장 자연스러운 남성 음성)</option>${voices.filter(v=>vScore(v)>=0||v.name===st.voice).map(v=>`<option ${v.name===st.voice?'selected':''} value="${esc(v.name)}">${esc(v.name)} (${esc(v.lang)})</option>`).join('')}</select>
     <label class="f">말하기 속도: <span id="rv">${st.rate}</span></label>
     <input type="range" id="rate" min="0.5" max="1.2" step="0.05" value="${st.rate}" style="width:100%">
     <button class="btn sm" id="vtest" style="margin-top:8px;width:100%">🔊 들어 보기</button>
@@ -931,7 +969,7 @@ function vList(){
   const qi=$('#q');qi.oninput=()=>{q=qi.value;const p=qi.selectionStart;vList();const n=$('#q');n.focus();n.setSelectionRange(p,p)};
   bindRows();
   const c=$('#clrs');if(c)c.onclick=()=>{if(!confirm('예시 문장을 지울까요?'))return;const ids=new Set(S.items.filter(x=>x.sample).map(x=>x.id));S.items=S.items.filter(x=>!x.sample);ids.forEach(i=>delete S.wrong[i]);save();render()};
-  $('#voice').onchange=e=>{st.voice=e.target.value;save();$('#vnow').textContent=pickVoice()?.name||'기기 기본 음성';speak('Bonjour, comment allez-vous ?')};
+  $('#voice').onchange=e=>{st.voice=e.target.value;save();$('#vnow').textContent=vNow();speak('Bonjour, comment allez-vous ?')};
   $('#vtest').onclick=()=>speak('Bonjour, comment allez-vous ? Que Dieu vous bénisse.');
   $('#rate').oninput=e=>{st.rate=+e.target.value;$('#rv').textContent=st.rate;save()};
   $('#rate').onchange=()=>speak('Bonjour, comment ça va ?');
@@ -955,17 +993,9 @@ function lnList(){
   }).slice().reverse();
 }
 function lnMark(id){document.querySelectorAll('.ln-row').forEach(b=>{const on=b.dataset.id===id;b.classList.toggle('on',on);b.querySelector('.ln-i').textContent=on?'🔉':'🔊'})}
-const lnAudio=new Audio();lnAudio.preload='none';lnAudio.setAttribute('playsinline','');
-function lnStop(){LN.all=false;LN.run++;lnAudio.pause();if(hasTTS)ttsStop();lnMark('');const b=$('#lnall');if(b)b.textContent='▶ 전체 듣기'}
-const LN_SILENT='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=',lnCache=new Map();
-async function lnClip(fr){
-  if(lnCache.has(fr))return lnCache.get(fr);
-  const r=await fetch(TR_URL.replace(/\/translate$/,'/say')+'?q='+encodeURIComponent(fr.slice(0,200)),{headers:{'X-Sync-Token':SYNC.token}});
-  if(!r.ok)throw new Error(String(r.status));
-  const u=URL.createObjectURL(await r.blob());lnCache.set(fr,u);return u;
-}
+function lnStop(){LN.all=false;LN.run++;ttsStop();lnMark('');const b=$('#lnall');if(b)b.textContent='▶ 전체 듣기'}
 function lnPlay(x,done){
-  const run=++LN.run;lnMark(x.id);if(hasTTS)ttsStop();
+  const run=++LN.run;lnMark(x.id);ttsStop();lnAudio.preservesPitch=true;lnAudio.webkitPreservesPitch=true;
   const end=()=>{if(run!==LN.run)return;lnMark('');done&&done()};
   // 기기 음성은 기계음이 심해서 서버 음성을 먼저 써요. 안 되면 기기 음성으로 읽어요.
   const fallback=()=>{if(run!==LN.run)return;if(hasTTS)ttsPlay(x.fr,LN.slow?0.72:S.settings.rate,false,end);else{toast('소리를 불러오지 못했어요');end()}};
@@ -1244,11 +1274,12 @@ const mmss=s=>Math.floor(s/60)+':'+pad(s%60);
 function speakP(text,slow,who){
   return new Promise(res=>{
     const t0=Date.now();
-    if(!hasTTS){setTimeout(()=>res(1500),1500);return}
+    if(!hasTTS&&!syncOn()){setTimeout(()=>res(1500),1500);return}
     let done=false;
     const fin=()=>{if(done)return;done=true;clearTimeout(t);res(Math.max(800,Date.now()-t0))};
-    const t=setTimeout(fin,text.length*(slow?150:110)+4000);
-    ttsPlay(text,slow?0.72:S.settings.rate,who,fin);
+    const t=setTimeout(fin,text.length*(slow?150:110)+9000);
+    const device=()=>hasTTS?ttsPlay(text,slow?0.72:S.settings.rate,who,fin):fin();
+    if(syncOn())svPlay(text,svRate(slow),who,fin,device);else device();
   });
 }
 // 내 목소리를 듣고 문장과 얼마나 비슷한지 확인해요
@@ -1310,7 +1341,7 @@ function spSecond(){
 function spAdvance(){SP.rep=0;SP.qi++;if(SP.qi>=SP.queue.length){SP.queue=spQueue();SP.qi=0}}
 function spInterrupt(){
   if(!SP)return;SP.token=(SP.token||0)+1;
-  if(hasTTS)ttsStop();
+  ttsStop();
   try{SP.rec&&SP.rec.abort()}catch(_){}
   SP.wake&&SP.wake();
 }
@@ -2385,7 +2416,7 @@ function lDraw(){
   </div>`;
   $('#lplay').onclick=()=>lPlay(false);$('#lslow').onclick=()=>lPlay(true);
   document.querySelectorAll('.lopt').forEach(b=>b.onclick=()=>{
-    if(L.picked!==null)return;L.picked=q.opts[+b.dataset.o];L.play++;if(hasTTS)ttsStop();
+    if(L.picked!==null)return;L.picked=q.opts[+b.dataset.o];L.play++;ttsStop();
     L.res.push({t:q.t,ok:L.picked===q.ans,id:q.id});lDraw();
   });
   const nx=$('#lnext');if(nx)nx.onclick=()=>{if(L.i+1<L.qs.length){L.i++;L.picked=null;lDraw();scrollTo(0,0);setTimeout(()=>lPlay(false),250)}else lEnd()};
