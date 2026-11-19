@@ -241,11 +241,33 @@ function diffHtml(ans,correct){
     return '<span class="miss">'+esc(w)+'</span>';
   }).join('');
 }
+// 🎤 음성 인식 결과는 조금씩 달라요 (le/la, 철자 한두 개, 숫자) — 너그럽게 비교해요
+function editDist(a,b){
+  if(a===b)return 0;if(!a.length)return b.length;if(!b.length)return a.length;
+  let p=Array.from({length:b.length+1},(_,i)=>i);
+  for(let i=1;i<=a.length;i++){const c=[i];for(let j=1;j<=b.length;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=c}
+  return p[b.length];
+}
+const SIM_NUM={'1':'un','2':'deux','3':'trois','4':'quatre','5':'cinq','6':'six','7':'sept','8':'huit','9':'neuf','10':'dix','11':'onze','12':'douze','20':'vingt','100':'cent'};
+function simWords(s){
+  return norm(s,false).replace(/'/g,"' ").split(' ').filter(Boolean)
+    .map(w=>SIM_NUM[w]||w.replace(/^(l|d|j|n|s|c|m|t|qu)'$/,'$1e'));
+}
+const SIM_ART=new Set(['le','la','les','un','une','des','de','du']);
 function similarity(a,b){
-  const A=norm(a,false).split(' ').filter(Boolean),B=norm(b,false).split(' ').filter(Boolean);
-  if(!B.length)return 0;let hit=0;const pool=A.slice();
-  B.forEach(w=>{const i=pool.indexOf(w);if(i>-1){hit++;pool.splice(i,1)}});
-  return hit/Math.max(B.length,A.length);
+  const A=simWords(a),B=simWords(b);
+  if(!B.length||!A.length)return 0;
+  const near=(x,y)=>{if(x===y)return 1;const L=Math.max(x.length,y.length),d=editDist(x,y);
+    return (L>=4&&d<=1)||(L>=7&&d<=2)?0.85:0};
+  const pool=A.slice();let hit=0,need=0;
+  B.forEach(w=>{const wt=SIM_ART.has(w)?0.5:1;need+=wt;
+    let bi=-1,bs=0;pool.forEach((x,i)=>{const s=near(x,w);if(s>bs){bs=s;bi=i}});
+    if(bi>-1){hit+=bs*wt;pool.splice(bi,1)}});
+  const extra=pool.filter(w=>!SIM_ART.has(w)).length;
+  const wordScore=hit/(need+extra*0.5);
+  // 글자 단위로도 비교해서 띄어쓰기·연음 차이를 덮어요
+  const ca=A.join(''),cb=B.join(''),charScore=1-editDist(ca,cb)/Math.max(ca.length,cb.length);
+  return Math.max(0,Math.min(1,Math.max(wordScore,charScore)));
 }
 
 // ---------- 음성 ----------
@@ -351,6 +373,8 @@ async function micTrack(){
     let list=(await md.enumerateDevices()).filter(d=>d.kind==='audioinput');
     if(!list.some(d=>d.label)){(await md.getUserMedia({audio:true})).getTracks().forEach(t=>t.stop());list=(await md.enumerateDevices()).filter(d=>d.kind==='audioinput')}
     if(!list.some(d=>MIC_PHONE.test(d.label)))return null; // 아이폰 마이크가 없으면 평소대로
+    const dflt=list.find(d=>d.deviceId==='default')||list[0];
+    if(dflt&&!MIC_PHONE.test(dflt.label))return null; // 기본 마이크가 아이폰이 아니면 그대로 써요 (인식이 가장 잘 돼요)
     const real=list.filter(d=>d.deviceId!=='default'&&d.deviceId!=='communications'&&!MIC_PHONE.test(d.label)&&!MIC_VIRTUAL.test(d.label));
     const def=list.find(d=>d.deviceId==='default'),same=def&&real.find(d=>def.label.includes(d.label));
     const pick=same||real.find(d=>MIC_LOCAL.test(d.label))||real[0];if(!pick)return null;
@@ -872,12 +896,16 @@ function vQuestion(){
         ttsStop();
         rec=new SR();rec.lang='fr-FR';rec.interimResults=true;rec.maxAlternatives=3;
         let best='';
-        rec.onresult=e=>{const r=e.results[e.results.length-1];best=r[0].transcript;
-          for(const alt of r){if(similarity(alt.transcript,it.fr)>similarity(best,it.fr))best=alt.transcript}
+        rec.onresult=e=>{
+          // 말이 여러 조각으로 들어와도 모두 이어 붙여요
+          const all=Array.from(e.results),head=all.slice(0,-1).map(r=>r[0].transcript).join(' '),last=all[all.length-1];
+          best=(head+' '+last[0].transcript).trim();
+          for(const alt of last){const c=(head+' '+alt.transcript).trim();if(similarity(c,it.fr)>similarity(best,it.fr))best=c}
           $('#heard').textContent='들린 말: '+best};
         rec.onerror=e=>{toast(e.error==='not-allowed'?'마이크 권한을 허용해 주세요':'인식 실패, 다시 해보세요')};
         rec.onend=()=>{mic.classList.remove('rec');mic.textContent='🎤 다시 말하기';rec=null;
-          if(best){const s=similarity(best,it.fr);answer(s>=0.75,{heard:best,sim:s})}};
+          if(best){const s=similarity(best,it.fr);answer(s>=0.7,{heard:best,sim:s})}
+          else $('#heard').textContent='소리가 안 들렸어요. 마이크 가까이에서 또박또박 다시 말해 보세요';};
         mic.classList.add('rec');mic.textContent='⏹ 듣는 중… (누르면 끝)';
         srStart(rec,()=>T.answered||!rec,true).catch(()=>{toast('마이크를 켜지 못했어요');mic.classList.remove('rec');mic.textContent='🎤 다시 말하기';rec=null});
       };
