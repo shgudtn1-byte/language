@@ -1060,13 +1060,17 @@ function mvDB(){
 }
 const mvK=id=>PROF+':'+id;
 async function mvAll(id){const db=await mvDB();return new Promise((res,rej)=>{const q=db.transaction('rec').objectStore('rec').index('k').getAll(mvK(id));q.onsuccess=()=>res(q.result.sort((a,b)=>a.at-b.at));q.onerror=()=>rej(q.error)})}
-async function mvDel(id,ns){const db=await mvDB();await new Promise((res,rej)=>{const t=db.transaction('rec','readwrite');ns.forEach(n=>t.objectStore('rec').delete(n));t.oncomplete=res;t.onerror=()=>rej(t.error)});mvSumSet(id,await mvAll(id))}
+async function mvDel(id,ns){const db=await mvDB();
+  // 다른 기기에도 올라간 녹음이면, 클라우드에서도 지우도록 적어 둬요
+  const gone=(await mvAll(id)).filter(r=>ns.includes(r.n)&&r.synced&&r.rid).map(r=>mvPath(id,r));
+  if(gone.length){mvTombSet([...new Set(mvTombs().concat(gone))]);mvSyncSoon()}
+  await new Promise((res,rej)=>{const t=db.transaction('rec','readwrite');ns.forEach(n=>t.objectStore('rec').delete(n));t.oncomplete=res;t.onerror=()=>rej(t.error)});mvSumSet(id,await mvAll(id))}
 async function mvPut(id,blob,sec){
   const db=await mvDB();
-  await new Promise((res,rej)=>{const t=db.transaction('rec','readwrite');t.objectStore('rec').add({k:mvK(id),at:Date.now(),blob,type:blob.type,sec});t.oncomplete=res;t.onerror=()=>rej(t.error)});
+  await new Promise((res,rej)=>{const t=db.transaction('rec','readwrite');const at=Date.now();t.objectStore('rec').add({k:mvK(id),at,blob,type:blob.type,sec,rid:at+'-'+Math.random().toString(36).slice(2,6),synced:false});t.oncomplete=res;t.onerror=()=>rej(t.error)});
   let all=await mvAll(id);
   if(all.length>20){await mvDel(id,all.slice(1,all.length-19).map(r=>r.n));all=await mvAll(id)}
-  mvSumSet(id,all);
+  mvSumSet(id,all);mvSyncSoon();
 }
 function mvStopPlay(){try{myAudio.pause();myAudio.onended=null}catch(_){}if(MV.url){URL.revokeObjectURL(MV.url);MV.url=null}}
 // 아이폰은 누른 순간에 소리를 열어 둬야 나중에 재생돼요
@@ -1094,7 +1098,7 @@ async function mvRecord(id){
   let stream;
   try{const tr=await micTrack(true);stream=tr?new MediaStream([tr]):await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}})}
   catch(_){toast('마이크 권한을 허용해 주세요',3000);return}
-  const type=['audio/webm;codecs=opus','audio/mp4','audio/webm','audio/ogg;codecs=opus'].find(t=>MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(t));
+  const type=['audio/mp4;codecs=mp4a.40.2','audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus'].find(t=>MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(t));
   let mr;try{mr=new MediaRecorder(stream,type?{mimeType:type}:undefined)}catch(_){mr=new MediaRecorder(stream)}
   const chunks=[],t0=Date.now();MV.rec=mr;MV.id=id;
   mr.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
@@ -1111,6 +1115,70 @@ async function mvRecord(id){
   lnRecMark();
 }
 // 📈 지금까지의 녹음: 첫 녹음과 최근 녹음을 비교해서 얼마나 늘었는지 들어 봐요
+// ☁️ 녹음 동기화: 단어와 같은 비공개 저장소(language-data)의 voice/<사람>/ 폴더에 올리고 받아와요
+const MVD_KEY='frstudy.voice.del.'+PROF;
+function mvTombs(){try{return JSON.parse(localStorage.getItem(MVD_KEY))||[]}catch(_){return []}}
+function mvTombSet(a){try{localStorage.setItem(MVD_KEY,JSON.stringify(a))}catch(_){}}
+const mvEnc=id=>encodeURIComponent(id).replace(/%/g,'~'),mvDec=s=>{try{return decodeURIComponent(s.replace(/~/g,'%'))}catch(_){return s}};
+const mvExt=t=>/mp4|m4a|aac/.test(t||'')?'m4a':/ogg/.test(t||'')?'ogg':'webm';
+const mvType=e=>({m4a:'audio/mp4',ogg:'audio/ogg',webm:'audio/webm'})[e]||'audio/webm';
+const mvPath=(id,r)=>`voice/${PROF}/${mvEnc(id)}/${r.rid}.${mvExt(r.type)}`;
+const mvUrlPath=p=>p.split('/').map(encodeURIComponent).join('/');
+function mvGh(path,opt){opt=opt||{};return fetch(`https://api.github.com/repos/${SYNC.repo}/${path}`,{cache:'no-store',method:opt.method||'GET',body:opt.body,
+  headers:Object.assign({Authorization:'Bearer '+SYNC.token,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'},opt.headers||{})})}
+async function mvRecs(){const db=await mvDB();return new Promise((res,rej)=>{const q=db.transaction('rec').objectStore('rec').index('k').getAll(IDBKeyRange.bound(PROF+':',PROF+':￿'));q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)})}
+async function mvSave(r){const db=await mvDB();await new Promise((res,rej)=>{const t=db.transaction('rec','readwrite');t.objectStore('rec').put(r);t.oncomplete=res;t.onerror=()=>rej(t.error)})}
+async function mvRemove(ns){const db=await mvDB();await new Promise((res,rej)=>{const t=db.transaction('rec','readwrite');ns.forEach(n=>t.objectStore('rec').delete(n));t.oncomplete=res;t.onerror=()=>rej(t.error)})}
+const mvB64=blob=>new Promise((res,rej)=>{const f=new FileReader();f.onload=()=>res(String(f.result).split(',')[1]||'');f.onerror=()=>rej(f.error);f.readAsDataURL(blob)});
+var mvSyncing=null,mvSyncAgain=false,mvSyncT=0;
+function mvSyncSoon(){clearTimeout(mvSyncT);mvSyncT=setTimeout(()=>mvSync(),1500)}
+function mvSync(){
+  if(typeof syncOn!=='function'||!syncOn()||!window.indexedDB)return Promise.resolve();
+  if(mvSyncing){mvSyncAgain=true;return mvSyncing}
+  mvSyncing=mvSyncRun().catch(e=>console.warn('녹음 동기화',e)).finally(()=>{mvSyncing=null;if(mvSyncAgain){mvSyncAgain=false;mvSyncSoon()}});
+  return mvSyncing;
+}
+async function mvSyncRun(){
+  const pre=`voice/${PROF}/`,remote=new Map();let full=true;
+  const tr=await mvGh('git/trees/HEAD?recursive=1');
+  if(tr.ok){const j=await tr.json();full=!j.truncated;for(const t of j.tree||[])if(t.type==='blob'&&t.path.startsWith(pre))remote.set(t.path,t.sha)}
+  else if(tr.status!==404&&tr.status!==409)throw new Error('목록 '+tr.status);
+  const changed=new Set();
+  // 1) 이 기기에서 지운 녹음은 클라우드에서도 지워요
+  let tombs=mvTombs();
+  for(const p of tombs.slice()){
+    const sha=remote.get(p);
+    if(sha){const r=await mvGh('contents/'+mvUrlPath(p),{method:'DELETE',body:JSON.stringify({message:'녹음 지움',sha})});if(!r.ok&&r.status!==404)continue;remote.delete(p)}
+    tombs=tombs.filter(x=>x!==p);
+  }
+  mvTombSet(tombs);const tset=new Set(tombs);
+  // 2) 이 기기 녹음: 안 올라간 건 올리고, 다른 기기에서 지운 건 여기서도 지워요
+  const local=new Set();
+  for(const r of await mvRecs()){
+    const id=r.k.slice(PROF.length+1);
+    if(!r.rid){r.rid=r.at+'-'+Math.random().toString(36).slice(2,6);r.synced=false;await mvSave(r)}
+    const p=mvPath(id,r);local.add(p);
+    if(remote.has(p)){if(!r.synced){r.synced=true;await mvSave(r)}continue}
+    if(r.synced){if(full&&tr.ok){await mvRemove([r.n]);changed.add(id)}continue}
+    const body=JSON.stringify({message:'녹음: '+id,content:await mvB64(r.blob)});
+    let u=await mvGh('contents/'+mvUrlPath(p),{method:'PUT',body});
+    if(u.status===409){await new Promise(z=>setTimeout(z,1500));u=await mvGh('contents/'+mvUrlPath(p),{method:'PUT',body})}
+    if(u.ok||u.status===422){r.synced=true;await mvSave(r)}
+  }
+  // 3) 다른 기기에서 녹음한 건 받아와요
+  for(const p of remote.keys()){
+    if(local.has(p)||tset.has(p))continue;
+    const m=p.slice(pre.length).match(/^([^/]+)\/((\d+)-[^./]+)\.(\w+)$/);if(!m)continue;
+    const id=mvDec(m[1]);
+    const r=await mvGh('contents/'+mvUrlPath(p),{headers:{Accept:'application/vnd.github.raw+json'}});if(!r.ok)continue;
+    const blob=new Blob([await r.arrayBuffer()],{type:mvType(m[4])});
+    await mvSave({k:mvK(id),at:+m[3],blob,type:blob.type,rid:m[2],synced:true});changed.add(id);
+  }
+  for(const id of changed){const all=await mvAll(id);if(all.length>20)await mvDel(id,all.slice(1,all.length-19).map(r=>r.n));else mvSumSet(id,all)}
+  if(changed.size&&tab==='listen'&&!MV.rec&&document.getElementById('lnrows'))lnRows();
+}
+setInterval(()=>{if(tab==='listen'&&document.visibilityState==='visible')mvSync()},60000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&tab==='listen')mvSync()});
 async function mvHist(row,x){
   const old=row.querySelector('.mv-hist');if(old){old.remove();return}
   const all=await mvAll(x.id);if(!all.length)return;
@@ -1171,6 +1239,7 @@ function lnRows(){
   $('#lnrows').innerHTML=shown.length?shown.map(x=>lnRowHtml(x)).join('')+(list.length>300?'<div class="muted" style="padding:10px 4px">앞의 300개만 보여요. 검색으로 찾아 주세요.</div>':''):'<div class="empty">찾는 표현이 없어요</div>';
 }
 function vListen(){
+  mvSync();
   if(!voices.length)loadVoices();
   $('#view').innerHTML=`<div class="card"><div class="ln-top"><h2>듣고 말하기 <small class="muted" id="lncount"></small></h2>
     <div class="muted" style="font-size:13px;margin:-4px 0 8px">🔊 원어민 발음 → 🎙️ 내가 녹음 → ▶️ 내 목소리로 비교해요. 녹음은 이 기기에 저장돼요.</div>
