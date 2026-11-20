@@ -217,7 +217,7 @@ function seed(){
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&Array.isArray(d.items))return d}catch(e){}return seed()}
 function save(){if(typeof onSaved==='function')onSaved();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 let S=load();
-function fix(){S.settings=S.settings||{};if(S.settings.voiceV!==2){S.settings.voiceV=2;S.settings.voice='';if(S.settings.rate===0.9)S.settings.rate=0.95}S.items.forEach(x=>{if(!x.pack&&!/^p[swgcbvh]\d{3}$/.test(x.id))x.kind=kindOf(x.fr)});S.todos=S.todos||{};S.diary=S.diary||{};S.history=S.history||[];S.settings=S.settings||{};S.wrong=S.wrong||{};S.log=S.log||{};S.stamp=S.stamp||{};S.speak=S.speak||{};
+function fix(){S.settings=S.settings||{};if(S.settings.voiceV!==2){S.settings.voiceV=2;S.settings.voice='';if(S.settings.rate===0.9)S.settings.rate=0.95}S.items.forEach(x=>{if(!x.pack&&!/^p[swgcbvh]\d{3}$/.test(x.id))x.kind=kindOf(x.fr)});S.todos=S.todos||{};S.diary=S.diary||{};S.history=S.history||[];S.settings=S.settings||{};S.wrong=S.wrong||{};S.log=S.log||{};S.stamp=S.stamp||{};S.speak=S.speak||{};S.quiz=S.quiz||{};
   S.settings.wtypes=Object.assign({say:true,speak:true,spell:false,dict:false},S.settings.wtypes||{});S.settings.sp=Object.assign({goalMin:60,goalReps:300,reps:5,pause:'mid',mode:(window.SpeechRecognition||window.webkitSpeechRecognition)?'mic':'auto',show:'text',scope:'least',slowFirst:true,pk:'s',cat:'👋 인사'},S.settings.sp||{})}
 fix();
 
@@ -2557,6 +2557,21 @@ function lLocal(src,n){
   });
   return Q;
 }
+// 🗂️ 문제 은행: 한 번 만든 역할극 문제는 지우지 않고 쌓아서, 복습 때 다시 내요 (기기끼리 동기화)
+function qBankRec(q){return {at:today(),t:q.t,scene:q.scene,qtext:q.qtext,say:q.say,who:q.who,ko:q.ko,ans:q.ans,ansKo:q.ansKo,wrong:q.opts.filter(o=>o!==q.ans),explain:q.explain,id:q.id,tries:[]}}
+function qFromBank(k){const r=S.quiz[k];return {qid:k,t:r.t,scene:r.scene,qtext:r.qtext,say:r.say,who:r.who,fr:r.say,ko:r.ko,ans:r.ans,ansKo:r.ansKo,opts:shuffle([r.ans,...(r.wrong||[])]),explain:r.explain,id:r.id,ai:true}}
+function qStat(){const ks=Object.keys(S.quiz||{});let wrong=0,fresh=0;ks.forEach(k=>{const t=S.quiz[k].tries||[];if(!t.length)fresh++;else if(!t[t.length-1].ok)wrong++});return {n:ks.length,wrong,fresh}}
+// 복습 순서: 마지막에 틀린 문제 → 아직 안 푼 문제 → 오래전에 푼 문제
+function qPick(n,onlyWrong){
+  const ks=Object.keys(S.quiz||{}).filter(k=>{const t=S.quiz[k].tries||[];return !onlyWrong||(t.length&&!t[t.length-1].ok)});
+  const score=k=>{const t=S.quiz[k].tries||[],last=t[t.length-1];if(last&&!last.ok)return 0;if(!t.length)return 1;return 2+(last.d<daysAgo(3)?0:1)};
+  return shuffle(ks).sort((a,b)=>score(a)-score(b)||String((S.quiz[a].tries||[]).slice(-1)[0]?.d||'').localeCompare(String((S.quiz[b].tries||[]).slice(-1)[0]?.d||''))).slice(0,n).map(qFromBank);
+}
+function lReview(n,onlyWrong){
+  const qs=qPick(n,onlyWrong);
+  if(!qs.length){toast(onlyWrong?'틀렸던 문제가 없어요 🎉':'저장된 문제가 아직 없어요. 새 문제를 먼저 풀어 보세요',3000);return}
+  L={qs,i:0,res:[],picked:null,review:true,onlyWrong};lDraw();setTimeout(()=>lPlay(false),300);
+}
 async function lMake(n){
   const src=lSource(Math.max(n,8));
   if(src.length<3)throw new Error('저장한 표현이 3개 이상 있어야 해요');
@@ -2569,7 +2584,11 @@ async function lMake(n){
       const qs=(j&&j.questions||[]).filter(q=>q.lines&&q.lines.length&&q.answer&&(q.distractors||[]).length>=2).map(q=>({
         t:LTYPES[q.kind]?q.kind:'detail',scene:q.scene,qtext:q.question,say:q.lines.map(l=>l.fr),who:q.lines.map(l=>l.who),fr:q.lines.map(l=>l.fr),ko:q.lines.map(l=>l.ko),
         ans:q.answer,ansKo:q.answer_ko,opts:shuffle([q.answer,...q.distractors.filter(d=>d!==q.answer).slice(0,4)]),explain:q.explain,id:(src[q.target]||{}).id,ai:true}));
-      if(qs.length>=Math.min(3,n))return qs.slice(0,n);
+      if(qs.length>=Math.min(3,n)){
+        const out=qs.slice(0,n),base=Date.now().toString(36);
+        out.forEach((q,i)=>{q.qid=base+i;S.quiz[q.qid]=qBankRec(q)});save();
+        return out;
+      }
     }catch(_){}
     toast('상황 문제를 못 만들어서 기본 문제로 낼게요',2600);
   }
@@ -2598,7 +2617,7 @@ function lDraw(){
   const opt=(o,k)=>{const cls=!done?'':o===q.ans?'good':o===L.picked?'bad':'';
     return `<button class="lopt ${q.t==='pic'?'pic5':''} ${cls}" data-o="${k}" ${done?'disabled':''}><b>${'①②③④⑤'[k]}</b> ${q.t==='pic'?`<span>${esc(o)}</span>`:esc(o)}</button>`};
   $('#view').innerHTML=`<div class="card">
-    <div class="row" style="justify-content:space-between"><span class="qtype">${LTYPES[q.t]}</span><span class="muted">${L.i+1} / ${L.qs.length}</span></div>
+    <div class="row" style="justify-content:space-between"><span class="qtype">${L.review?'🔁 ':''}${LTYPES[q.t]||''}${q.qid&&(S.quiz[q.qid]?.tries||[]).length>1?` <small class="muted">${S.quiz[q.qid].tries.length-1}번 풀어 봄</small>`:''}</span><span class="muted">${L.i+1} / ${L.qs.length}</span></div>
     <div class="bar"><i style="width:${L.i/L.qs.length*100}%"></i></div>
     ${q.scene?`<div class="muted" style="margin-top:6px">🎭 ${esc(q.scene)}</div>`:''}
     <div style="font-size:17px;font-weight:600;margin:4px 0 10px">${esc(q.qtext||'잘 듣고 알맞은 것을 고르세요.')}</div>
@@ -2613,6 +2632,7 @@ function lDraw(){
   document.querySelectorAll('.lopt').forEach(b=>b.onclick=()=>{
     if(L.picked!==null)return;L.picked=q.opts[+b.dataset.o];L.play++;ttsStop();
     const okk=L.picked===q.ans;L.res.push({t:q.t,ok:okk,id:q.id});
+    if(q.qid&&S.quiz[q.qid]){const tr=S.quiz[q.qid].tries||(S.quiz[q.qid].tries=[]);tr.push({d:today(),ok:okk});if(tr.length>30)tr.splice(0,tr.length-30);save()}
     const it=q.id&&S.items.find(x=>x.id===q.id);if(it){const at=it.att||(it.att=[]);at.push({d:today(),t:'listen',ok:okk});if(at.length>60)at.splice(0,at.length-60);save()}
     lDraw();
   });
@@ -2623,22 +2643,26 @@ function lEnd(){
   S.history.push({d:today(),at:timeNow(),s:'listen',score,total:r.length,wrong:[...new Set(r.filter(x=>!x.ok&&x.id&&S.items.some(i=>i.id===x.id)).map(x=>x.id))]});
   save();
   const by={};r.forEach(x=>{by[x.t]=by[x.t]||[0,0];by[x.t][1]++;if(x.ok)by[x.t][0]++});
-  const pct=Math.round(score/r.length*100);
+  const pct=Math.round(score/r.length*100),wasReview=L.review,ow=L.onlyWrong;
   L=null;
   $('#view').innerHTML=`<div class="card" style="text-align:center"><h2>👂 듣기 평가 결과 (A2)</h2>
     <div style="font-size:44px;font-weight:800;color:var(--accent)">${score} / ${r.length}</div>
     <div class="muted">${pct>=90?'🎉 귀가 열리고 있어요! Bravo !':pct>=70?'👍 잘했어요! 조금만 더!':pct>=50?'💪 좋아요. 틀린 유형을 다시 들어 봐요.':'🌱 처음엔 다 이래요. 매일 10문제씩 들으면 귀가 열려요!'}</div>
     <div style="text-align:left;margin-top:14px">${Object.entries(by).map(([t,[o,a]])=>`<div class="row" style="justify-content:space-between;padding:6px 0;border-top:1px solid var(--line)"><span>${LTYPES[t]}</span><b>${o}/${a}</b></div>`).join('')}</div>
-    <button class="btn pri big" id="lagain" style="margin-top:14px">🔄 새 문제로 한 번 더</button>
+    <button class="btn pri big" id="lagain" style="margin-top:14px">${wasReview?'🔁 복습 한 번 더':'🔄 새 문제로 한 번 더'}</button>
+    <div class="muted" style="margin-top:8px;font-size:13px">🗂️ 문제 은행에 ${qStat().n}문제가 쌓여 있어요</div>
     <button class="btn" id="lback" style="margin-top:8px;width:100%">테스트 화면으로</button></div>`;
-  $('#lagain').onclick=()=>lStart(r.length);$('#lback').onclick=()=>render();
+  $('#lagain').onclick=()=>wasReview?lReview(r.length,ow):lStart(r.length);$('#lback').onclick=()=>render();
 }
 function listenCard(){
   const runs=S.history.filter(h=>h.s==='listen'),last=runs[runs.length-1];
   return `<div class="card"><h2>👂 듣기 평가 (A2 · 내가 배운 표현으로)</h2>
     <div class="muted" style="margin-bottom:10px">내가 저장한 표현을 넓혀서 <b>시장 · 택시 · 교회 · 이웃</b> 같은 상황의 <b>4~6줄 역할극 대화</b>를 만들어요. 대화 전체를 종합해야 답이 나와요: 최종 시간·가격·장소, 이유·다음 행동, 알맞은 대답. 바뀐 약속 같은 함정도 있어요. <b>할 때마다 새 문제</b>예요.</div>
     ${last?`<div class="muted" style="margin-bottom:8px">지난번: ${last.score}/${last.total} (${esc(last.d.slice(5).replace('-','/'))} ${esc(last.at)}) · 지금까지 ${runs.length}번</div>`:''}
-    <div class="row"><button class="btn pri" id="lgo10" style="flex:1">👂 5문제</button><button class="btn" id="lgo20" style="flex:1">10문제</button></div>
+    <div class="row"><button class="btn pri" id="lgo10" style="flex:1">🆕 새 문제 5</button><button class="btn" id="lgo20" style="flex:1">🆕 새 문제 10</button></div>
+    ${(()=>{const s=qStat();return s.n?`<label class="f">🗂️ 문제 은행 ${s.n}문제 <span class="muted" style="font-size:12px">(안 푼 것 ${s.fresh} · 최근에 틀린 것 ${s.wrong})</span></label>
+    <div class="row"><button class="btn" id="lrev" style="flex:1">🔁 복습 10문제</button><button class="btn" id="lrevw" style="flex:1" ${s.wrong?'':'disabled'}>❌ 틀린 문제만 (${s.wrong})</button></div>
+    <div class="muted" style="font-size:12px;margin-top:4px">복습은 틀린 문제 → 안 푼 문제 → 오래전에 푼 문제 순서로 나와요. 보기 순서는 매번 바뀌어요.</div>`:''})()}
   </div>`;
 }
 // 📊 내 시험 기록: 최근 14일 · 정답률 · 가장 약한 표현
@@ -2677,7 +2701,7 @@ function openStat(id){
   document.body.appendChild(m);
 }
 document.addEventListener('click',e=>{const b=e.target.closest('[data-st]');if(!b||e.target.closest('button,a,input,select,textarea,[data-pic]'))return;openStat(b.dataset.st)});
-function bindListenCard(){const a=$('#lgo10'),b=$('#lgo20');if(a)a.onclick=()=>lStart(5);if(b)b.onclick=()=>lStart(10)}
+function bindListenCard(){const a=$('#lgo10'),b=$('#lgo20'),c=$('#lrev'),d=$('#lrevw');if(a)a.onclick=()=>lStart(5);if(b)b.onclick=()=>lStart(10);if(c)c.onclick=()=>lReview(10);if(d)d.onclick=()=>lReview(10,true)}
 
 // ---------- ☁️ 기기 간 동기화 (GitHub 비공개 저장소의 data.json) ----------
 // 기록을 작은 조각(표현 1개, 하루 할 일, 하루 일기…)으로 나눠 조각마다 마지막 수정 시각을 기억하고,
@@ -2695,6 +2719,7 @@ function parts(s){
   for(const d in s.diary||{})p['diary:'+d]=JSON.stringify(s.diary[d]);
   for(const d in s.log||{})p['log:'+d]=JSON.stringify(s.log[d]);
   for(const d in s.speak||{})p['speak:'+d]=JSON.stringify(s.speak[d]);
+  for(const k in s.quiz||{})p['quiz:'+k]=JSON.stringify(s.quiz[k]);
   p.wrong=JSON.stringify(s.wrong||{});p.settings=JSON.stringify(s.settings||{});
   return p;
 }
@@ -2712,12 +2737,12 @@ function onSaved(){
   syncTimer=setTimeout(()=>{syncTimer=null;syncNow()},drilling?60000:4000);
 }
 function rebuild(p,base){
-  const s={...base,items:[],todos:{},diary:{},log:{},speak:{},wrong:{},settings:{}};
+  const s={...base,items:[],todos:{},diary:{},log:{},speak:{},wrong:{},settings:{},quiz:{}};
   for(const k in p){
     const v=JSON.parse(p[k]);
     if(k==='wrong'){s.wrong=v;continue}if(k==='settings'){s.settings=v;continue}
     const i=k.indexOf(':'),t=k.slice(0,i),id=k.slice(i+1);
-    if(t==='item')s.items.push(v);else if(t==='todos')s.todos[id]=v;else if(t==='diary')s.diary[id]=v;else if(t==='log')s.log[id]=v;else if(t==='speak')s.speak[id]=v;
+    if(t==='item')s.items.push(v);else if(t==='todos')s.todos[id]=v;else if(t==='diary')s.diary[id]=v;else if(t==='log')s.log[id]=v;else if(t==='speak')s.speak[id]=v;else if(t==='quiz')s.quiz[id]=v;
   }
   s.items.sort((a,b)=>a.added<b.added?-1:a.added>b.added?1:0);
   return s;
