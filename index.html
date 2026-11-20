@@ -78,6 +78,15 @@ label.f{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
 .lb.say.on{border-color:var(--accent);color:var(--accent)}
 .lb.rec.going{background:#d93025;border-color:#d93025;color:#fff;animation:mvpulse 1s infinite}
 @keyframes mvpulse{50%{opacity:.65}}
+.stat4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;margin:4px 0 12px}
+.stat4 b{display:block;font-size:24px;line-height:1.2}.stat4 span{font-size:12px;color:var(--muted)}.stat4 small{display:block;font-size:11px;color:var(--muted)}
+.dchips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;margin-bottom:4px;-webkit-overflow-scrolling:touch}.dchips .chip{flex:none;white-space:nowrap}
+.ln-day{display:flex;align-items:center;gap:8px;justify-content:space-between;font-weight:700;padding:14px 4px 6px;border-top:2px solid var(--line);color:var(--accent)}
+[data-st]{cursor:pointer}
+.bars14{display:flex;align-items:flex-end;gap:3px;height:70px;margin:8px 0 2px}.bars14 div{flex:1;background:var(--line);border-radius:3px 3px 0 0;position:relative;min-height:2px}
+.bars14 div i{position:absolute;left:0;right:0;bottom:0;background:var(--good);border-radius:3px 3px 0 0}
+.stbox{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0}.stbox div{border:1px solid var(--line);border-radius:10px;padding:8px;text-align:center}.stbox b{display:block;font-size:20px}
+.tl{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}.tl span{font-size:12px;border-radius:6px;padding:2px 6px;background:var(--soft)}.tl .o{color:var(--good)}.tl .x{color:var(--bad)}
 .mv-hist{margin-top:8px;padding:8px 10px;border:1px dashed var(--line);border-radius:10px;font-size:13px}
 .mv-hist .mv-h{display:flex;align-items:center;gap:6px;padding:3px 0}.mv-hist .mv-h span{flex:1}
 nav button{min-width:0}
@@ -156,7 +165,7 @@ textarea.gm,textarea.gf{font-weight:600;border-width:2px}textarea.gm{border-colo
 </head>
 <body>
 <div class="wrap">
-  <header><div class="flag"><i></i><i></i><i></i></div><div><h1>매일 불어 테스트</h1><div class="muted" id="sub"></div></div><span id="sync" style="margin-left:auto;font-size:18px;cursor:pointer"></span><button class="adm" id="prof" style="cursor:pointer;font:inherit;font-size:13px"></button><a href="#admin" class="adm" id="adm">🔒 관리자</a></header>
+  <header><div class="flag"><i></i><i></i><i></i></div><div><h1>매일 불어 테스트</h1><div class="muted" id="sub"></div></div><span id="sync" style="margin-left:auto;font-size:18px;cursor:pointer"></span><button class="adm" id="setb" title="설정 (목소리·동기화·백업)" style="cursor:pointer;font:inherit;font-size:13px">⚙️</button><button class="adm" id="prof" style="cursor:pointer;font:inherit;font-size:13px"></button><a href="#admin" class="adm" id="adm">🔒 관리자</a></header>
   <div id="inapp" class="card" style="display:none;border-color:var(--accent);background:var(--soft)"></div>
   <main id="view"></main>
 </div>
@@ -496,8 +505,8 @@ document.addEventListener('click',e=>{
 });
 
 // ---------- 내비 ----------
-let tab=location.hash==='#listen'?'listen':'home';
-const TABS=[['home','🏠','오늘'],['add','✏️','저장'],['speak','🎧','스피킹'],['listen','🎙️','듣고말하기'],['test','📝','테스트'],['wrong','📕','오답노트'],['list','📚','목록']];
+let tab=location.hash==='#listen'?'listen':'add';
+const TABS=[['add','✏️','저장'],['speak','⭐','필수 표현'],['listen','🎙️','듣고말하기'],['test','📝','테스트'],['wrong','📕','오답노트']];
 function renderNav(){
   const wc=Object.keys(S.wrong).filter(byId).length;
   $('#nav').innerHTML=TABS.map(([k,i,l])=>`<button class="${tab===k?'on':''}" data-tab="${k}"><b>${i}</b><span>${l}${k==='wrong'&&wc?`<span class="badge">${wc}</span>`:''}</span></button>`).join('');
@@ -514,7 +523,7 @@ function render(){
   const d=new Date();$('#sub').textContent=`${d.getMonth()+1}월 ${d.getDate()}일 · ${isMorning()?'좋은 아침이에요 ☀️':'오늘 하루 수고했어요 🌙'}`;
   renderNav();
   $('#adm').textContent=adminOk?'🔓 관리자':'🔒 관리자';
-  ({home:vHome,add:vAdd,speak:vSpeak,listen:vListen,test:vTest,wrong:vWrong,list:vList,admin:vAdmin})[tab]();
+  ({home:vAdd,add:vAdd,speak:vSpeak,listen:vListen,test:vTest,wrong:vWrong,list:vList,admin:vAdmin})[tab]();
   if(typeof setSync==='function'&&syncState)setSync(syncState);
 }
 
@@ -560,8 +569,35 @@ function vHome(){
 }
 
 // ---------- 저장 ----------
+// 📅 저장 기록: 오늘·이번 주·이번 달 개수 + 날짜 탭(기본은 오늘)
+var ADDDAY='';
+function dayFull(d){const l=dayLabel(d);return d===daysAgo(1)||d===daysAgo(2)?l+' · '+d.slice(5).replace('-','/'):l}
+function dayLabel(d){if(d===today())return '오늘';if(d===daysAgo(1))return '어제';if(d===daysAgo(2))return '그저께';const x=new Date(d+'T00:00');return (x.getMonth()+1)+'/'+x.getDate()+' ('+'일월화수목금토'[x.getDay()]+')'}
+function savedDays(withToday){const m={};if(withToday)m[today()]=0;S.items.forEach(x=>{if(x.added)m[x.added]=(m[x.added]||0)+1});return Object.entries(m).sort((a,b)=>a[0]<b[0]?1:-1)}
+function weekStart(back){const d=new Date();d.setDate(d.getDate()-(d.getDay()+6)%7-7*(back||0));return dstr(d)}
+function savedStats(){
+  const t=today(),w=weekStart(),pw=weekStart(1),m=t.slice(0,8)+'01',pd=new Date();pd.setDate(1);pd.setMonth(pd.getMonth()-1);const pm=dstr(pd);
+  const o={t:0,w:0,pw:0,m:0,pm:0,all:S.items.length};
+  S.items.forEach(x=>{const a=x.added||'';if(a===t)o.t++;if(a>=w)o.w++;else if(a>=pw)o.pw++;if(a>=m)o.m++;else if(a>=pm)o.pm++});
+  return o;
+}
+function addLog(){
+  const days=savedDays(true),st=savedStats();
+  if(!days.some(([d])=>d===ADDDAY))ADDDAY=today();
+  const list=S.items.filter(x=>x.added===ADDDAY).reverse();
+  return `<div class="card" id="addlog"><h2>📅 저장 기록</h2>
+    <div class="stat4"><div><b>${st.t}</b><span>오늘</span></div><div><b>${st.w}</b><span>이번 주</span><small>지난주 ${st.pw}</small></div><div><b>${st.m}</b><span>이번 달</span><small>지난달 ${st.pm}</small></div><div><b>${st.all}</b><span>전체</span></div></div>
+    <div class="dchips">${days.map(([d,n])=>`<button class="chip ${d===ADDDAY?'on':''}" data-day="${d}">${dayLabel(d)} <small>${n}</small></button>`).join('')}</div>
+    <div class="muted" style="font-size:13px;margin-bottom:4px">${dayFull(ADDDAY)} 저장한 표현 ${list.length}개 · 표현을 누르면 시험·녹음 기록이 보여요</div>
+    ${list.length?list.map(itemRow).join(''):'<div class="empty">아직 없어요. 오늘 배운 걸 하나 적어볼까요?</div>'}</div>`;
+}
+function bindAddLog(){
+  document.querySelectorAll('#addlog [data-day]').forEach(b=>b.onclick=()=>{ADDDAY=b.dataset.day;const box=$('#addlog'),sx=box.querySelector('.dchips').scrollLeft;box.outerHTML=addLog();$('#addlog .dchips').scrollLeft=sx;bindAddLog()});
+  bindRows();
+}
 let draftImg=null;
 function vAdd(){
+  ADDDAY=today();
   const todays=S.items.filter(x=>x.added===today()).reverse();
   $('#view').innerHTML=`
   <div class="card"><h2>오늘 배운 것 저장 ✏️</h2>
@@ -584,9 +620,8 @@ function vAdd(){
     </div>
     <div class="muted" style="margin-top:8px">⌘/Ctrl + Enter로도 저장돼요.</div>
   </div>
-  <div class="card"><h2>오늘 저장한 것 (${todays.length})</h2>
-    ${todays.length?todays.map(itemRow).join(''):'<div class="empty">아직 없어요. 오늘 배운 걸 하나 적어볼까요?</div>'}
-  </div>`;
+  ${addLog()}`;
+  bindAddLog();
   const fr=$('#fr'),ko=$('#ko');
   const prev=()=>{const im=draftImg?(draftImg.t==='none'?null:draftImg):(autoEmoji(fr.value,ko.value)?{t:'emoji',v:autoEmoji(fr.value,ko.value)}:null);
     $('#pp').innerHTML=im?picHtml(im,'m').replace('margin:8px 0',''):'<div class="pic m" style="font-size:14px;color:var(--muted)">그림 없음</div>'};
@@ -771,73 +806,79 @@ async function autoLook(fr,ko,prev){
 function itemRow(x){
   const w=S.wrong[x.id];
   return `<div class="item">${thumb(x)}
-  <div class="t"><div class="fr">${frG(x.fr)}<span class="tag">${x.kind}</span>${saidTotal(x.id)?`<span class="tag">🗣️${saidTotal(x.id)}</span>`:''}${w?`<span class="tag" style="color:var(--bad)">✗${w.count}</span>`:''}</div>${x.pron?`<div class="pron">${esc(x.pron)}</div>`:''}${x.note?`<div class="note">💡 ${esc(x.note)}</div>`:''}<div class="muted">${esc(x.ko)} · ${x.added.slice(5).replace('-','/')}</div></div>
+  <div class="t" data-st="${esc(x.id)}"><div class="fr">${frG(x.fr)}<span class="tag">${x.kind}</span>${(x.att||[]).length?`<span class="tag">📝${x.att.length}</span>`:''}${saidTotal(x.id)?`<span class="tag">🗣️${saidTotal(x.id)}</span>`:''}${w?`<span class="tag" style="color:var(--bad)">✗${w.count}</span>`:''}</div>${x.pron?`<div class="pron">${esc(x.pron)}</div>`:''}${x.note?`<div class="note">💡 ${esc(x.note)}</div>`:''}<div class="muted">${esc(x.ko)} · ${x.added.slice(5).replace('-','/')}</div></div>
   <button class="ib" data-say="${esc(x.fr)}" title="듣기">🔊</button><button class="ib" data-del="${x.id}" title="삭제">🗑️</button></div>`;
 }
 function bindRows(){
   document.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
     if(!confirm('이 표현을 지울까요?'))return;
-    S.items=S.items.filter(x=>x.id!==b.dataset.del);delete S.wrong[b.dataset.del];save();render();
+    S.items=S.items.filter(x=>x.id!==b.dataset.del);delete S.wrong[b.dataset.del];save();if(tab==='add'&&$('#addlog')){const y=scrollY;$('#addlog').outerHTML=addLog();bindAddLog();scrollTo(0,y)}else render();
   });
 }
 
 // ---------- 테스트 설정 ----------
 const TYPES={
   spell:['✍️ 스펠링','한국어 뜻을 보고 불어로 쓰기'],
-  dict:['🎧 받아쓰기','불어 소리만 듣고 그대로 쓰기'],
+  dict:['🎧→✍️ 불어 듣고 불어로 적기','불어 소리만 듣고 들린 그대로 쓰기'],
   both:['🎧✍️ 듣고 뜻+불어','문장은 안 보여요. 듣고 뜻과 불어를 모두 쓰기'],
   speak:['🗣️ 보고 듣고 따라 읽기','철자를 보고, 원어민 소리 듣고, 따라 말하기'],
-  say:['🇰🇷→🗣️ 뜻 보고 불어로 말하기','한국어만 보고 불어로 말한 뒤, 소리와 철자로 확인'],
+  say:['🇰🇷→🗣️ 한국어 보고 불어로 말하기','한국어만 보고 불어로 말한 뒤, 원어민 소리와 철자로 확인'],
 };
 const setup={session:null,scope:'all',count:15};
+// 📝 내가 저장한 표현 시험: 범위(오늘·날짜·7일·전체·틀린 것) + 문제 수
+var MT={scope:'today',day:'',count:999};
 let T=null;
+function mtPool(){
+  let a=S.items;
+  if(MT.scope==='today')a=a.filter(x=>x.added===today());
+  else if(MT.scope==='day')a=a.filter(x=>x.added===MT.day);
+  else if(MT.scope==='week')a=a.filter(x=>x.added>=daysAgo(6));
+  else if(MT.scope==='wrong')a=a.filter(x=>S.wrong[x.id]);
+  return a;
+}
 function vTest(){
   if(T)return vQuestion();
   if(L)return lDraw();
-  if(!setup.session)setup.session=isMorning()?'morning':'evening';
-  const t=S.settings.types;
-  const sayNote=`<div class="muted" style="margin-top:8px">🇰🇷→🗣️ ${esc(ME.n)}님 테스트는 <b>한국어 뜻을 보고 불어로 말하기</b> 한 가지로만 나와요. 말하고 나면 원어민 소리와 철자로 확인해요.</div>`;
-  $('#view').innerHTML=`${ONLY_SAY?'':listenCard()}
-  <div class="card"><h2>🔤 내 단어 시험</h2>
-    <div class="muted">${esc(ME.n)}님이 저장한 <b>단어만</b> 따로 시험해요. 범위·문제 수는 아래 설정을 따라요.</div>
-    ${ONLY_SAY?sayNote:`<label class="f">단어 시험 유형 (섞어서 나와요)</label>
-    <div class="opts">${['say','speak','spell','dict'].map(k=>`<label><input type="checkbox" data-wtype="${k}" ${S.settings.wtypes[k]?'checked':''}><span><b>${TYPES[k][0]}</b><small>${TYPES[k][1]}</small></span></label>`).join('')}</div>`}
-    <div style="margin-top:10px"><button class="btn pri big" id="wgo">🔤 단어 시험 시작 (<span id="wn"></span>문제)</button></div>
-  </div>
-  <div class="card"><h2>테스트 설정</h2>
-    <label class="f">언제?</label>
-    <div class="seg" data-k="session"><button data-v="morning">☀️ 아침</button><button data-v="evening">🌙 저녁</button></div>
+  const t=S.settings.mtypes||(S.settings.mtypes={say:true,dict:!ONLY_SAY});
+  const days=savedDays(false);if(!MT.day||!days.some(([d])=>d===MT.day))MT.day=days[0]?days[0][0]:today();
+  const nT=S.items.filter(x=>x.added===today()).length;
+  $('#view').innerHTML=`
+  <div class="card"><h2>📝 내가 저장한 표현 시험</h2>
+    <div class="muted">기본은 <b>오늘 저장한 표현 전부</b>예요. 날짜를 골라 그날 것만 볼 수도 있어요.</div>
+    ${ONLY_SAY?`<div class="muted" style="margin-top:8px">🇰🇷→🗣️ ${esc(ME.n)}님 시험은 <b>한국어 보고 불어로 말하기</b>로만 나와요.</div>`
+      :`<label class="f">시험 유형 (고른 것이 번갈아 나와요)</label>
+    <div class="opts">${['say','dict'].map(k=>`<label><input type="checkbox" data-mtype="${k}" ${t[k]?'checked':''}><span><b>${TYPES[k][0]}</b><small>${TYPES[k][1]}</small></span></label>`).join('')}</div>`}
     <label class="f">범위</label>
-    <div class="seg" data-k="scope"><button data-v="today">오늘 것</button><button data-v="week">최근 7일</button><button data-v="all">전체</button></div>
+    <div class="seg wrap" data-mk="scope"><button data-v="today">오늘 (${nT})</button><button data-v="day">📅 날짜 고르기</button><button data-v="week">최근 7일</button><button data-v="all">전체</button><button data-v="wrong">틀린 것</button></div>
+    <div id="mtdaybox" style="margin-top:8px" class="${MT.scope==='day'?'':'hide'}"><select id="mtday">${days.map(([d,n])=>`<option value="${d}" ${d===MT.day?'selected':''}>${dayFull(d)} — ${n}개</option>`).join('')}</select></div>
     <label class="f">문제 수</label>
-    <div class="seg" data-k="count"><button data-v="10">10</button><button data-v="15">15</button><button data-v="30">30</button><button data-v="999">전부</button></div>
-    ${ONLY_SAY?sayNote:`<label class="f">문제 유형 (섞어서 나와요)</label>
-    <div class="opts">${Object.entries(TYPES).map(([k,[n,d]])=>`<label><input type="checkbox" data-type="${k}" ${t[k]?'checked':''}><span><b>${n}</b><small>${d}</small></span></label>`).join('')}</div>`}
+    <div class="seg" data-mk="count"><button data-v="10">10</button><button data-v="20">20</button><button data-v="999">전부</button></div>
     <div style="margin-top:14px"><button class="btn pri big" id="go">시작하기 (<span id="n"></span>문제)</button></div>
-  </div>`;
-  const sync=()=>{document.querySelectorAll('.seg').forEach(s=>s.querySelectorAll('button').forEach(b=>b.classList.toggle('on',String(setup[s.dataset.k])===b.dataset.v)));$('#n').textContent=pool().slice(0,setup.count).length;$('#wn').textContent=pool().filter(x=>x.kind==='단어').slice(0,setup.count).length};
-  document.querySelectorAll('.seg').forEach(s=>s.onclick=e=>{const b=e.target.closest('button');if(!b)return;setup[s.dataset.k]=s.dataset.k==='count'?+b.dataset.v:b.dataset.v;sync()});
-  document.querySelectorAll('[data-type]').forEach(c=>c.onchange=()=>{t[c.dataset.type]=c.checked;save()});
-  document.querySelectorAll('[data-wtype]').forEach(c=>c.onchange=()=>{S.settings.wtypes[c.dataset.wtype]=c.checked;save()});
+  </div>
+  ${ONLY_SAY?'':listenCard()}
+  ${statsCard()}`;
+  const sync=()=>{document.querySelectorAll('.seg[data-mk]').forEach(s=>s.querySelectorAll('button').forEach(b=>b.classList.toggle('on',String(MT[s.dataset.mk])===b.dataset.v)));
+    $('#mtdaybox').classList.toggle('hide',MT.scope!=='day');$('#n').textContent=Math.min(mtPool().length,MT.count)};
+  document.querySelectorAll('.seg[data-mk]').forEach(s=>s.onclick=e=>{const b=e.target.closest('button');if(!b)return;MT[s.dataset.mk]=s.dataset.mk==='count'?+b.dataset.v:b.dataset.v;sync()});
+  $('#mtday').onchange=e=>{MT.day=e.target.value;sync()};
+  document.querySelectorAll('[data-mtype]').forEach(c=>c.onchange=()=>{t[c.dataset.mtype]=c.checked;save()});
   $('#go').onclick=()=>startTest();
-  $('#wgo').onclick=()=>startTest('words');
   bindListenCard();sync();
 }
-function pool(){
-  const lim=setup.scope==='today'?today():setup.scope==='week'?daysAgo(6):'0000';
-  return S.items.filter(x=>x.added>=lim);
-}
+function pool(){return mtPool()}
 function startTest(mode){
-  const wrongOnly=mode===true,words=mode==='words';
-  const types=ONLY_SAY?['say']:Object.keys(TYPES).filter(k=>(words?S.settings.wtypes:S.settings.types)[k]);
-  if(!types.length){toast(words?'단어 시험 유형을 하나 이상 고르세요':'문제 유형을 하나 이상 고르세요');tab='test';render();return}
-  let items=wrongOnly?S.items.filter(x=>S.wrong[x.id]):words?pool().filter(x=>x.kind==='단어'):pool();
-  if(!items.length){toast(wrongOnly?'오답이 없어요 🎉':words?'이 범위에 저장한 단어가 없어요 (범위를 \'전체\'로 바꿔 보세요)':'이 범위에 저장된 표현이 없어요');tab=wrongOnly?'wrong':'test';render();return}
+  const wrongOnly=mode===true;
+  const t=S.settings.mtypes||{say:true,dict:true};
+  const types=ONLY_SAY?['say']:['say','dict'].filter(k=>t[k]);
+  if(!types.length){toast('시험 유형을 하나 이상 고르세요');tab='test';render();return}
+  let items=wrongOnly?S.items.filter(x=>S.wrong[x.id]):mtPool();
+  if(!items.length){toast(wrongOnly?'오답이 없어요 🎉':MT.scope==='today'?'오늘 저장한 표현이 없어요. 범위를 바꿔 보세요':'이 범위에 저장한 표현이 없어요');tab=wrongOnly?'wrong':'test';render();return}
   // 오답노트에 있는 것 먼저 + 섞기
   items=shuffle(items).sort((a,b)=>(S.wrong[b.id]?1:0)-(S.wrong[a.id]?1:0));
-  if(!wrongOnly)items=shuffle(items.slice(0,setup.count));
-  T={wrongOnly,session:wrongOnly?null:words?'words':(setup.session||(isMorning()?'morning':'evening')),i:0,res:[],
-     qs:items.map(it=>({id:it.id,type:types[Math.random()*types.length|0]})),answered:false};
+  if(!wrongOnly)items=shuffle(items.slice(0,MT.count));
+  const off=Math.random()*types.length|0;
+  T={wrongOnly,session:wrongOnly?null:'mine',i:0,res:[],
+     qs:items.map((it,i)=>({id:it.id,type:types[(i+off)%types.length]})),answered:false};
   tab='test';render();
 }
 
@@ -870,7 +911,7 @@ function vQuestion(){
           <div class="row"><button class="btn" id="selfno" style="flex:1">😓 몰랐어요</button><button class="btn" id="selfok" style="flex:1">😀 말했어요 → 확인</button></div>`}`;
   $('#view').innerHTML=`
   <div class="card">
-    <div class="row" style="justify-content:space-between;margin-bottom:6px"><span class="muted">${T.wrongOnly?'📕 오답 복습':T.session==='words'?'🔤 단어 시험':T.session==='morning'?'☀️ 아침 테스트':'🌙 저녁 테스트'} · ${T.i+1} / ${T.qs.length}</span>
+    <div class="row" style="justify-content:space-between;margin-bottom:6px"><span class="muted">${T.wrongOnly?'📕 오답 복습':T.session==='mine'?'📝 내 표현 시험':T.session==='words'?'🔤 단어 시험':T.session==='morning'?'☀️ 아침 테스트':'🌙 저녁 테스트'} · ${T.i+1} / ${T.qs.length}</span>
       <button class="btn sm" id="quit">그만하기</button></div>
     <div class="bar"><i style="width:${T.i/T.qs.length*100}%"></i></div>
     <div class="qtype">${tn}</div>
@@ -960,6 +1001,7 @@ function vQuestion(){
 function record(r){
   const it=byId(r.id);if(!it)return;
   T.res.push(r);
+  const at=it.att||(it.att=[]);at.push({d:today(),t:r.type,ok:!!r.ok});if(at.length>60)at.splice(0,at.length-60);
   if(r.ok){it.right++;const w=S.wrong[r.id];if(w){w.streak=(w.streak||0)+1;if(w.streak>=2){delete S.wrong[r.id];r.cleared=true}}}
   else{it.wrong++;const w=S.wrong[r.id]||{count:0};w.count++;w.streak=0;w.last=today();S.wrong[r.id]=w}
   save();
@@ -976,16 +1018,16 @@ function finish(){
 function vResult(){
   const score=T.res.filter(r=>r.ok).length,tot=T.res.length,wrongs=T.res.filter(r=>!r.ok),cleared=T.res.filter(r=>r.cleared);
   $('#view').innerHTML=`
-  <div class="card" style="text-align:center"><div class="muted">${T.wrongOnly?'📕 오답 복습':T.session==='words'?'🔤 단어 시험':T.session==='morning'?'☀️ 아침 테스트':'🌙 저녁 테스트'} 결과</div>
+  <div class="card" style="text-align:center"><div class="muted">${T.wrongOnly?'📕 오답 복습':T.session==='mine'?'📝 내 표현 시험':T.session==='words'?'🔤 단어 시험':T.session==='morning'?'☀️ 아침 테스트':'🌙 저녁 테스트'} 결과</div>
     <div class="score">${score} / ${tot}</div>
     <div>${tot&&score===tot?'완벽해요! Bravo ! 👏':score/tot>=.7?'잘했어요! Très bien !':'괜찮아요, 틀린 건 오답노트에서 다시 봐요 💪'}</div>
     ${cleared.length?`<div class="muted" style="margin-top:6px">✨ ${cleared.length}개가 오답노트에서 졸업했어요 (2번 연속 정답)</div>`:''}
   </div>
   ${wrongs.length?`<div class="card"><h2>틀린 것 (${wrongs.length})</h2>${[...new Set(wrongs.map(r=>r.id))].map(byId).filter(Boolean).map(itemRow).join('')}</div>`:''}
-  <div class="row">${wrongs.length?`<button class="btn pri" id="again" style="flex:1">📕 틀린 것만 다시</button>`:''}<button class="btn" id="home" style="flex:1">🏠 홈으로</button></div>`;
+  <div class="row">${wrongs.length?`<button class="btn pri" id="again" style="flex:1">📕 틀린 것만 다시</button>`:''}<button class="btn" id="home" style="flex:1">📝 테스트 화면으로</button></div>`;
   document.querySelectorAll('[data-del]').forEach(b=>b.remove());
   const ag=$('#again');if(ag)ag.onclick=()=>startTest(true);
-  $('#home').onclick=()=>{T=null;go('home')};
+  $('#home').onclick=()=>{T=null;go('test')};
 }
 
 // ---------- 오답노트 ----------
@@ -997,7 +1039,7 @@ function vWrong(){
     ${ws.length?`<div style="margin-top:12px"><button class="btn pri big" id="go">틀린 것만 테스트 (${ws.length})</button></div>`:''}
   </div>
   <div class="card">${ws.length?ws.map(x=>{const w=S.wrong[x.id];return `<div class="item">${thumb(x)}<button class="ib" data-say="${esc(x.fr)}">🔊</button>
-    <div class="t"><div class="fr">${frG(x.fr)}</div><div class="muted">${esc(x.ko)}</div>
+    <div class="t" data-st="${esc(x.id)}"><div class="fr">${frG(x.fr)}</div><div class="muted">${esc(x.ko)}</div>
     <div class="muted" style="font-size:12px">${w.count}번 틀림 · 연속 정답 ${w.streak||0}/2</div></div>
     <button class="btn sm" data-out="${x.id}">외웠어요</button></div>`}).join(''):'<div class="empty">🎉 오답이 하나도 없어요!</div>'}</div>`;
   const g=$('#go');if(g)g.onclick=()=>startTest(true);
@@ -1018,11 +1060,6 @@ function vList(){
     <input type="range" id="rate" min="0.5" max="1.2" step="0.05" value="${st.rate}" style="width:100%">
     <button class="btn sm" id="vtest" style="margin-top:8px;width:100%">🔊 들어 보기</button>
   </div>
-  <div class="card"><h2>저장한 표현 (${S.items.length})</h2>
-    <input type="text" id="q" placeholder="검색 (불어 또는 한국어)" value="${esc(q)}">
-    <div style="margin-top:8px">${list.length?list.map(itemRow).join(''):'<div class="empty">없어요</div>'}</div>
-    ${S.items.some(x=>x.sample)?'<button class="btn sm" id="clrs" style="margin-top:8px">예시 문장 모두 지우기</button>':''}
-  </div>
   <div class="card"><h2>설정</h2>
     <label class="opts" style="margin-top:10px"><label><input type="checkbox" id="strict" ${st.strict?'checked':''}><span><b>악센트까지 엄격하게 채점</b><small>끄면 é/e 차이는 맞음 + 경고로 처리해요</small></span></label></label>
     <label class="f">백업 (이 브라우저에만 저장되니 가끔 백업하세요)</label>
@@ -1030,8 +1067,6 @@ function vList(){
   </div>
   ${syncCard()}`;
   bindSyncCard();
-  const qi=$('#q');qi.oninput=()=>{q=qi.value;const p=qi.selectionStart;vList();const n=$('#q');n.focus();n.setSelectionRange(p,p)};
-  bindRows();
   const c=$('#clrs');if(c)c.onclick=()=>{if(!confirm('예시 문장을 지울까요?'))return;const ids=new Set(S.items.filter(x=>x.sample).map(x=>x.id));S.items=S.items.filter(x=>!x.sample);ids.forEach(i=>delete S.wrong[i]);save();render()};
   $('#voice').onchange=e=>{st.voice=e.target.value;save();$('#vnow').textContent=vNow();speak('Bonjour, comment allez-vous ?')};
   $('#vtest').onclick=()=>speak('Bonjour, comment allez-vous ? Que Dieu vous bénisse.');
@@ -1202,7 +1237,7 @@ function lnList(){
     if(LN.f==='wrong'&&!S.wrong[x.id])return false;
     if((LN.f==='단어'||LN.f==='문장')&&x.kind!==LN.f)return false;
     return !q||lnKey(x.fr+' '+x.ko+' '+(x.pron||'')).includes(q);
-  }).slice().reverse();
+  }).slice().reverse().sort((a,b)=>a.added<b.added?1:a.added>b.added?-1:0);
 }
 function lnMark(id){document.querySelectorAll('.ln-row').forEach(b=>{const on=b.dataset.id===id;b.classList.toggle('on',on);const s=b.querySelector('.lb.say');if(s){s.classList.toggle('on',on);s.textContent=on?'🔉 원어민':'🔊 원어민'}})}
 function lnStop(){LN.all=false;LN.run++;ttsStop();mvStopPlay();if(MV.rec&&MV.rec.state==='recording')MV.rec.stop();lnMark('');const b=$('#lnall');if(b)b.textContent='▶ 전체 듣기'}
@@ -1216,9 +1251,9 @@ function lnPlay(x,done){
   lnAudio.onended=lnAudio.onerror=null;lnAudio.src=LN_SILENT;lnAudio.play().catch(()=>{});
   lnClip(x.fr).then(u=>{if(run!==LN.run)return;lnAudio.onended=end;lnAudio.onerror=fallback;lnAudio.src=u;lnAudio.playbackRate=LN.slow?0.75:1;return lnAudio.play()}).catch(fallback);
 }
-function lnAll(){
+function lnAll(day){
   if(LN.all){lnStop();return}
-  const list=lnList();if(!list.length)return;
+  const list=day?lnList().filter(x=>x.added===day):lnList();if(!list.length)return;
   LN.all=true;$('#lnall').textContent='■ 멈추기';let i=0;
   const next=()=>{if(!LN.all)return;if(i>=list.length){lnStop();return}
     const x=list[i++];lnPlay(x,()=>{const run=LN.run;setTimeout(()=>{if(LN.all&&run===LN.run)next()},900)});
@@ -1236,7 +1271,8 @@ function lnRowHtml(x){
 function lnRows(){
   const list=lnList(),shown=list.slice(0,300);
   $('#lncount').textContent=list.length+'개';
-  $('#lnrows').innerHTML=shown.length?shown.map(x=>lnRowHtml(x)).join('')+(list.length>300?'<div class="muted" style="padding:10px 4px">앞의 300개만 보여요. 검색으로 찾아 주세요.</div>':''):'<div class="empty">찾는 표현이 없어요</div>';
+  const cnt={};list.forEach(x=>cnt[x.added]=(cnt[x.added]||0)+1);let last=null;
+  $('#lnrows').innerHTML=shown.length?shown.map(x=>{let hd='';if(x.added!==last){last=x.added;hd=`<div class="ln-day"><span>📅 ${dayFull(x.added)} <small class="muted">${cnt[x.added]}개</small></span><button class="lb" data-dayall="${esc(x.added)}">▶ 이 날 전체 듣기</button></div>`}return hd+lnRowHtml(x)}).join('')+(list.length>300?'<div class="muted" style="padding:10px 4px">앞의 300개만 보여요. 검색으로 찾아 주세요.</div>':''):'<div class="empty">찾는 표현이 없어요</div>';
 }
 function vListen(){
   mvSync();
@@ -1252,8 +1288,9 @@ function vListen(){
   $('#lnq').oninput=e=>{LN.q=e.target.value;lnStop();lnRows()};
   document.querySelectorAll('[data-lf]').forEach(b=>b.onclick=()=>{LN.f=b.dataset.lf;lnStop();vListen()});
   $('#lnslow').onclick=()=>{LN.slow=!LN.slow;$('#lnslow').textContent=LN.slow?'🐢 천천히 켜짐':'🐢 천천히'};
-  $('#lnall').onclick=lnAll;
-  $('#lnrows').onclick=e=>{const b=e.target.closest('.ln-row');if(!b)return;const x=S.items.find(i=>i.id===b.dataset.id);if(!x)return;
+  $('#lnall').onclick=()=>lnAll();
+  $('#lnrows').onclick=e=>{const da=e.target.closest('[data-dayall]');if(da){lnAll(da.dataset.dayall);return}
+    const b=e.target.closest('.ln-row');if(!b)return;const x=S.items.find(i=>i.id===b.dataset.id);if(!x)return;
     const a=e.target.closest('[data-act]'),act=a&&a.dataset.act;if(!act)return;
     if(act==='say'){const same=b.classList.contains('on');LN.all=false;$('#lnall').textContent='▶ 전체 듣기';if(same){lnStop();return}lnPlay(x);return}
     if(act==='me')return mvPlay(x.id);
@@ -1324,7 +1361,7 @@ function vAdmin(){
     <div class="seg" id="atabs"><button data-v="day">하루</button><button data-v="timeline">전체 기록</button><button data-v="stats">통계</button><button data-v="set">설정</button></div>
   </div><div id="ab"></div>`;
   document.querySelectorAll('#atabs button').forEach(b=>{b.classList.toggle('on',b.dataset.v===aTab);b.onclick=()=>{aTab=b.dataset.v;vAdmin();scrollTo(0,0)}});
-  $('#lock').onclick=()=>{adminOk=false;go('home')};
+  $('#lock').onclick=()=>{adminOk=false;go('add')};
   ({day:aDay,timeline:aTimeline,stats:aStats,set:aSet})[aTab]();
 }
 function openDay(d){aDate=d;aTab='day';vAdmin();scrollTo(0,0)}
@@ -1665,41 +1702,8 @@ function spDraw(){
 
 function vSpeak(){
   if(SP)return spDraw();
-  const c=S.settings.sp,d=spGet(),pm=Math.min(1,d.sec/(c.goalMin*60)),pr=Math.min(1,d.reps/c.goalReps);
-  const said=new Set();for(const k in S.speak)for(const id in (S.speak[k].by||{}))said.add(id);
-  const top=[...said].map(byId).filter(Boolean).map(x=>[x,saidTotal(x.id)]).filter(a=>a[1]).sort((a,b)=>b[1]-a[1]).slice(0,10);
-  $('#view').innerHTML=`
-  <div class="card"><h2>🎧 오늘의 스피킹 분량</h2>
-    <div class="row" style="justify-content:space-between"><span>⏱️ 말하기 시간</span><b>${Math.floor(d.sec/60)} / ${c.goalMin}분</b></div>
-    <div class="bar" style="margin:6px 0 12px"><i style="width:${pm*100}%;background:var(--good)"></i></div>
-    <div class="row" style="justify-content:space-between"><span>🗣️ 따라 말한 횟수</span><b>${d.reps} / ${c.goalReps}회</b></div>
-    <div class="bar" style="margin:6px 0 8px"><i style="width:${pr*100}%"></i></div>
-    ${pm>=1&&pr>=1?'<div style="text-align:center;font-weight:700;color:var(--good)">🎉 오늘 분량 완료! Bravo !</div>'
-      :`<div class="muted">남은 분량: ${Math.max(0,c.goalMin-Math.floor(d.sec/60))}분 · ${Math.max(0,c.goalReps-d.reps)}회 — 두 개 다 채워야 오늘 끝!</div>`}
-    <div style="margin-top:14px"><button class="btn pri big" id="spgo">🎧 이어폰 끼고 ${d.sec?'이어서 하기':'시작하기'}</button></div>
-    <div class="muted" style="margin-top:8px;text-align:center">🔊 듣고 → 🗣️ 따라 말하고 → 🔊 듣고 → 🗣️ 따라 말하고… 문장마다 ${c.reps}번씩, 시간은 실제로 훈련한 시간만 쌓여요</div>
-  </div>
-  ${packHtml()}
-  <div class="card"><h2>훈련 설정</h2>
-    <label class="f">연습할 문장</label><div class="seg wrap" data-k="scope"><button data-v="pack">⭐ 필수 100</button><button data-v="least">적게 말한 것</button><button data-v="today">오늘</button><button data-v="week">7일</button><button data-v="wrong">오답</button><button data-v="all">전체</button></div>
-    <label class="f">문장당 반복</label><div class="seg" data-k="reps"><button data-v="3">3번</button><button data-v="5">5번</button><button data-v="10">10번</button></div>
-    <label class="f">따라 말할 시간</label><div class="seg" data-k="pause"><button data-v="short">짧게</button><button data-v="mid">보통</button><button data-v="long">길게</button></div>
-    <label class="f">횟수 세기</label><div class="seg" data-k="mode"><button data-v="mic" ${SR?'':'disabled'}>🎤 내 목소리 인식</button><button data-v="auto">⏱️ 자동 진행</button></div>
-    <div class="muted" style="font-size:13px;margin-top:4px">${SR?'🎤: 실제로 말해야 1회로 세요 (50% 이상 비슷하면 통과). ⏱️: 따라 말할 시간이 지나면 1회로 세요.':'이 브라우저는 음성 인식이 안 돼서 ⏱️ 자동 진행만 돼요 (Chrome 추천).'}</div>
-    <label class="f">화면</label><div class="seg" data-k="show"><button data-v="text">문장 보면서</button><button data-v="hide">듣고만 (말한 뒤 보기)</button></div>
-    <div class="opts" style="margin-top:10px"><label><input type="checkbox" id="spslow" ${c.slowFirst?'checked':''}><span><b>첫 번째는 천천히 들려주기</b><small>문장마다 처음 한 번은 느린 속도로 들려줘요</small></span></label></div>
-    <label class="f">하루 목표 시간</label><div class="seg" data-k="goalMin"><button data-v="30">30분</button><button data-v="45">45분</button><button data-v="60">1시간</button><button data-v="90">1시간 반</button></div>
-    <label class="f">하루 목표 횟수</label><div class="seg" data-k="goalReps"><button data-v="200">200회</button><button data-v="300">300회</button><button data-v="500">500회</button><button data-v="800">800회</button></div>
-  </div>
-  <div class="card"><h2>많이 말한 표현 🗣️</h2>
-    ${top.length?top.map(([x,n])=>`<div class="item">${x.pack?`<div class="pic s">${esc(x.img.v)}</div>`:thumb(x)}<div class="t"><div class="fr">${frG(x.fr)}</div><div class="muted">${esc(x.ko)}</div></div><b>${n}번</b></div>`).join(''):'<div class="muted">아직 없어요. 시작하면 표현마다 몇 번 말했는지 쌓여요.</div>'}
-  </div>`;
-  const NUM=new Set(['reps','goalMin','goalReps']);
-  const sync=()=>document.querySelectorAll('.seg[data-k]').forEach(s=>s.querySelectorAll('button').forEach(b=>b.classList.toggle('on',String(c[s.dataset.k])===b.dataset.v)));
-  document.querySelectorAll('.seg[data-k]').forEach(s=>s.onclick=e=>{const b=e.target.closest('button');if(!b||b.disabled)return;const k=s.dataset.k;c[k]=NUM.has(k)?+b.dataset.v:b.dataset.v;save();if(k==='goalMin'||k==='goalReps')vSpeak();else sync()});
-  $('#spslow').onchange=e=>{c.slowFirst=e.target.checked;save()};
-  $('#spgo').onclick=spStart;
-  bindPack();sync();
+  $('#view').innerHTML=packHtml();
+  bindPack();
 }
 
 // ---------- ⭐ 필수 100 (유치원·초등학생 수준 실전 문장 100 + 단어 100) ----------
@@ -2494,7 +2498,7 @@ function packIds(){
 function packHtml(){
   const c=S.settings.sp,P=PACKS[c.pk],all=P.cats.flatMap(x=>x.ids),ids=packIds();
   const said=all.filter(id=>saidTotal(id)).length,mine=new Set(S.items.map(x=>x.id));
-  const chip=(v,label,ids)=>{const d=ids.filter(id=>saidTotal(id)).length;return `<button class="chip ${c.cat===v?'on':''}" data-cat="${esc(v)}">${esc(label)} <small>${d}/${ids.length}</small></button>`};
+  const chip=(v,label,ids)=>`<button class="chip ${c.cat===v?'on':''}" data-cat="${esc(v)}">${esc(label)} <small>${ids.length}</small></button>`;
   return `<div class="card" id="pack"><h2>⭐ 필수 표현</h2>
     <div class="muted" style="margin-bottom:10px">짧고 실전적인 표현만 골랐어요. 불어 아래 <span class="pron" style="display:inline">주황색 글씨</span>가 한국어 발음이에요. 이것부터 입에 붙이세요!</div>
     ${GRAM}
@@ -2504,12 +2508,10 @@ function packHtml(){
     ${c.pk==='b'?'<div class="muted" style="margin-top:8px;font-size:13px">📖 성경과 예배에서 꼭 만나는 단어예요. 파랑은 남성, 빨강은 여성 명사예요.</div>':''}
     ${c.pk==='v'?'<div class="muted" style="margin-top:8px;font-size:13px">📜 불어는 Louis Segond 1910 성경 본문이고, 한국어는 뜻을 쉽게 풀어 쓴 말이에요. 시편·이사야는 한글 성경과 절 번호가 다를 수 있어요.</div>':''}
     ${c.pk==='h'?'<div class="muted" style="margin-top:8px;font-size:13px">⛪ 인사, 기도, 예배 인도, 설교, 새신자 환영, 위로, 심방처럼 교회에서 바로 쓰는 표현이에요.</div>':''}
-    <div class="row" style="justify-content:space-between;margin:10px 0 4px"><span>말해 본 표현</span><b>${said} / ${all.length}</b></div>
-    <div class="bar" style="margin-bottom:10px"><i style="width:${said/all.length*100}%;background:var(--good)"></i></div>
+    <div style="height:10px"></div>
     <div class="chips">${chip('','전체',all)}${P.cats.map(x=>chip(x.name,x.name,x.ids)).join('')}</div>
-    <button class="btn pri" id="pkgo" style="width:100%;margin:10px 0 4px">▶ ${esc(c.cat||'전체')} ${ids.length}개 듣고 따라 말하기</button>
     ${ids.map(id=>{const x=PITEMS[id],n=saidTotal(id);return `<div class="item"><div class="pic s">${esc(x.img.v)}</div>
-      <div class="t"><div class="fr">${frG(x.fr)}${n?`<span class="tag">🗣️${n}</span>`:''}</div><div class="pron">${esc(x.pron)}</div><div class="muted">${esc(x.ko)}</div>${x.note?`<div class="note">💡 ${esc(x.note)}</div>`:''}</div>
+      <div class="t"><div class="fr">${frG(x.fr)}</div><div class="pron">${esc(x.pron)}</div><div class="muted">${esc(x.ko)}</div>${x.note?`<div class="note">💡 ${esc(x.note)}</div>`:''}</div>
       <button class="ib" data-say="${esc(x.fr)}" title="듣기">🔊</button>${mine.has(id)?'<span class="ib" title="내 목록에 있어요 (테스트에도 나와요)">✅</span>':`<button class="ib" data-padd="${id}" title="내 목록에 넣기 (테스트에도 나와요)">＋</button>`}</div>`}).join('')}
     <div class="row" style="margin-top:10px"><button class="btn sm" id="pkadd">＋ 이 ${ids.length}개 모두 내 목록에 넣기 (테스트에도 나와요)</button></div>
   </div>`;
@@ -2518,7 +2520,6 @@ function bindPack(){
   const c=S.settings.sp,re=()=>{const y=window.scrollY;vSpeak();window.scrollTo(0,y)};
   $('#pk').onclick=e=>{const b=e.target.closest('button');if(!b)return;c.pk=b.dataset.v;c.cat=PACKS[c.pk].cats[0].name;save();re()};
   document.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{c.cat=b.dataset.cat;save();re()});
-  $('#pkgo').onclick=()=>{c.scope='pack';save();spStart()};
   const add=ids=>{const have=new Set(S.items.map(x=>x.id));let k=0;
     ids.forEach(id=>{if(have.has(id))return;const{pack,cat,...x}=PITEMS[id];S.items.push({...x,img:{...x.img},added:today()});k++});
     save();re();toast(k?`📚 ${k}개를 내 목록에 넣었어요`:'이미 다 들어 있어요')};
@@ -2526,128 +2527,87 @@ function bindPack(){
   $('#pkadd').onclick=()=>add(packIds());
 }
 
-// ---------- 👂 듣기 평가 (A1, 수능식 5지선다) ----------
-// 매번 문제를 새로 뽑아요: 필수 표현 369개 + 내가 저장한 표현 + 아래 대화·이야기 문제은행을 섞어서 만들어요.
-const LQA=[ // [질문, 알맞은 대답, 질문 뜻, 대답 뜻, 종류]
-["Comment tu t'appelles ?","Je m'appelle Awa.","이름이 뭐야?","내 이름은 아와야.","name"],
-["Tu as quel âge ?","J'ai dix ans.","몇 살이야?","열 살이야.","age"],
-["Tu habites où ?","J'habite à Cocody.","어디 살아?","코코디에 살아.","place"],
-["Ça va ?","Ça va bien, merci.","잘 지내?","잘 지내, 고마워.","how"],
-["Tu veux de l'eau ?","Oui, merci, j'ai soif.","물 줄까?","응, 고마워. 목말라.","yn"],
-["Quelle heure est-il ?","Il est huit heures.","몇 시야?","8시야.","time"],
-["C'est combien, la banane ?","Cent francs.","바나나 얼마예요?","100프랑이요.","price"],
-["Tu aimes le football ?","Oui, j'adore le football !","축구 좋아해?","응, 축구 정말 좋아해!","yn"],
-["Où sont les toilettes ?","Là-bas, à droite.","화장실 어디예요?","저기, 오른쪽이요.","place"],
-["Tu viens d'où ?","Je viens de Corée.","어디서 왔어?","한국에서 왔어.","place"],
-["Qu'est-ce que tu manges ?","Du riz et du poulet.","뭐 먹어?","밥이랑 닭고기.","food"],
-["Tu as des frères ?","Oui, j'ai deux frères.","형제 있어?","응, 형제가 둘 있어.","yn"],
-["Il fait chaud aujourd'hui ?","Oui, il fait très chaud.","오늘 더워?","응, 아주 더워.","yn"],
-["Tu vas à l'école demain ?","Non, demain c'est dimanche.","내일 학교 가?","아니, 내일은 일요일이야.","yn"],
-["Qui est-ce ?","C'est ma sœur.","누구야?","내 여동생(언니)이야.","who"],
-["Tu parles français ?","Oui, un peu.","프랑스어 할 줄 알아?","응, 조금.","yn"],
-["Pourquoi tu es triste ?","Parce que mon chat est malade.","왜 슬퍼?","내 고양이가 아파서.","why"],
-["Tu veux jouer avec moi ?","D'accord, on joue !","나랑 놀래?","좋아, 놀자!","yn"],
-["Merci beaucoup !","De rien.","정말 고마워!","천만에.","thanks"],
-["Vous allez à l'église dimanche ?","Oui, je vais au culte à neuf heures.","일요일에 교회 가세요?","네, 9시 예배에 가요.","yn"],
-["Quel est ton plat préféré ?","L'attiéké avec du poisson.","제일 좋아하는 음식이 뭐야?","생선 곁들인 아티에케.","food"],
-["Où est ton sac ?","Il est sous la table.","네 가방 어디 있어?","탁자 밑에 있어.","place"],
-["C'est quoi, ta couleur préférée ?","Le bleu.","제일 좋아하는 색이 뭐야?","파란색.","color"],
-["Tu te lèves à quelle heure ?","À six heures.","몇 시에 일어나?","6시에.","time"],
-["Comment va ta maman ?","Elle va bien, merci.","엄마는 잘 지내셔?","잘 지내셔, 고마워.","how"],
-["Pardon, je suis en retard !","Ce n'est pas grave.","미안, 늦었어!","괜찮아.","thanks"],
-["On y va ?","Oui, allons-y !","갈까?","응, 가자!","yn"],
-["Vous croyez en Dieu ?","Oui, je crois en Dieu.","하나님을 믿으세요?","네, 하나님을 믿어요.","yn"],
-["Tu prends le taxi ?","Non, je prends le bus.","택시 타?","아니, 버스 타.","yn"],
-["Combien de frères et sœurs as-tu ?","J'en ai trois.","형제자매가 몇 명이야?","세 명 있어.","num"],
-];
-const LDIA=[ // 대화: 장소/상황 + 세부 내용 문제
-{at:'시장',lines:["Bonjour madame, c'est combien, les tomates ?","Mille francs le tas.","D'accord, je prends deux tas."],ko:["안녕하세요, 토마토 얼마예요?","한 무더기에 1,000프랑이에요.","좋아요, 두 무더기 살게요."],q:'손님은 토마토를 몇 무더기 사나요?',a:'두 무더기',x:['한 무더기','세 무더기','네 무더기','다섯 무더기']},
-{at:'병원',lines:["Bonjour docteur.","Bonjour. Qu'est-ce qui ne va pas ?","J'ai mal à la tête et j'ai de la fièvre."],ko:["안녕하세요, 선생님.","안녕하세요. 어디가 불편하세요?","머리가 아프고 열이 나요."],q:'환자는 어디가 아픈가요?',a:'머리 (열도 나요)',x:['배','다리','이','귀']},
-{at:'식당 (마키)',lines:["Qu'est-ce que vous voulez manger ?","Un poulet braisé avec de l'attiéké, s'il vous plaît.","Et comme boisson ?","Un jus de bissap."],ko:["뭐 드시겠어요?","아티에케랑 숯불 닭구이 주세요.","음료는요?","비사프 주스요."],q:'손님이 주문한 음료는?',a:'비사프 주스',x:['물','우유','커피','콜라']},
-{at:'택시 안',lines:["Bonjour, vous allez au Plateau ?","Oui, montez.","C'est combien ?","Deux mille francs."],ko:["안녕하세요, 플라토 가세요?","네, 타세요.","얼마예요?","2,000프랑이요."],q:'택시비는 얼마인가요?',a:'2,000프랑',x:['1,000프랑','500프랑','3,000프랑','5,000프랑']},
-{at:'학교 교실',lines:["Bonjour les enfants ! Ouvrez vos cahiers.","Oui, maîtresse.","Aujourd'hui, on apprend les nombres."],ko:["안녕, 얘들아! 공책 펴세요.","네, 선생님.","오늘은 숫자를 배워요."],q:'오늘 무엇을 배우나요?',a:'숫자',x:['색깔','동물','노래','글자']},
-{at:'교회',lines:["Bienvenue ! C'est votre première fois ici ?","Oui, c'est mon ami qui m'a invité.","Le culte commence dans cinq minutes."],ko:["환영해요! 여기 처음 오셨어요?","네, 친구가 초대해 줬어요.","예배는 5분 뒤에 시작해요."],q:'예배는 언제 시작하나요?',a:'5분 뒤',x:['지금','10분 뒤','1시간 뒤','내일']},
-{at:'집 (아침)',lines:["Maman, j'ai faim !","Le petit-déjeuner est sur la table.","Merci, maman !"],ko:["엄마, 배고파요!","아침밥 식탁 위에 있어.","고마워요, 엄마!"],q:'아이는 왜 엄마를 부르나요?',a:'배가 고파서',x:['졸려서','아파서','무서워서','놀고 싶어서']},
-{at:'전화 통화',lines:["Allô ? C'est Paul ?","Oui, c'est moi. Qui parle ?","C'est Awa. Tu es où ?"],ko:["여보세요? 폴이야?","응, 나야. 누구세요?","아와야. 너 어디야?"],q:'전화를 건 사람은 누구인가요?',a:'아와',x:['폴','엄마','선생님','의사']},
-{at:'가게',lines:["Bonjour, vous avez du pain ?","Oui, voilà. C'est trois cents francs.","Et une bouteille d'eau, s'il vous plaît."],ko:["안녕하세요, 빵 있어요?","네, 여기요. 300프랑이에요.","그리고 물 한 병 주세요."],q:'빵은 얼마인가요?',a:'300프랑',x:['100프랑','200프랑','500프랑','1,000프랑']},
-{at:'생일 파티',lines:["Joyeux anniversaire, Awa !","Merci ! Entre, entre !","Voilà un cadeau pour toi."],ko:["생일 축하해, 아와!","고마워! 들어와, 들어와!","여기 너 주려고 선물 가져왔어."],q:'아와에게 무엇을 주나요?',a:'선물',x:['꽃','케이크','돈','편지']},
-{at:'버스 정류장',lines:["Pardon, le bus pour Yopougon, c'est ici ?","Oui, il arrive dans dix minutes.","Merci !"],ko:["실례합니다, 요푸공 가는 버스 여기서 타요?","네, 10분 뒤에 와요.","고마워요!"],q:'버스는 언제 오나요?',a:'10분 뒤',x:['5분 뒤','지금','30분 뒤','1시간 뒤']},
-{at:'길거리 (길 묻기)',lines:["Excusez-moi, où est la pharmacie ?","Allez tout droit, puis à gauche.","Merci beaucoup !"],ko:["실례합니다, 약국이 어디예요?","쭉 가다가 왼쪽으로 가세요.","정말 고마워요!"],q:'약국에 가려면 어떻게 가나요?',a:'쭉 가다가 왼쪽',x:['쭉 가다가 오른쪽','뒤로 돌아서','바로 여기','2층으로']},
-{at:'은행',lines:["Bonjour, je voudrais retirer de l'argent.","Vous avez votre carte ?","Oui, la voilà."],ko:["안녕하세요, 돈을 찾고 싶어요.","카드 있으세요?","네, 여기 있어요."],q:'손님은 무엇을 하고 싶나요?',a:'돈 찾기',x:['돈 보내기','카드 만들기','환전하기','돈 빌리기']},
-{at:'운동장',lines:["Passe-moi le ballon !","Attention, j'arrive !","But ! J'ai gagné !"],ko:["공 나한테 줘!","조심해, 간다!","골! 내가 이겼다!"],q:'무엇을 하며 놀고 있나요?',a:'공놀이 (축구)',x:['숨바꼭질','줄넘기','카드놀이','그림 그리기']},
-];
-const LMONO=[ // 짧은 이야기: 주제 + 세부 내용 문제
-{topic:'가족',lines:["J'ai une grande famille.","J'ai deux frères et une sœur.","Mon papa est chauffeur et ma maman est commerçante."],ko:["우리 가족은 대가족이에요.","형제가 둘, 자매가 하나 있어요.","아빠는 운전기사고 엄마는 장사를 하세요."],q:'아빠의 직업은?',a:'운전기사',x:['선생님','의사','상인','농부']},
-{topic:'날씨',lines:["Aujourd'hui, il fait très chaud.","Il y a beaucoup de soleil.","Ce soir, il va pleuvoir."],ko:["오늘은 아주 더워요.","햇볕이 아주 강해요.","오늘 저녁엔 비가 올 거예요."],q:'오늘 저녁 날씨는?',a:'비가 와요',x:['맑아요','눈이 와요','바람이 불어요','추워요']},
-{topic:'음식',lines:["Le matin, je mange du pain.","À midi, je mange du riz avec de la sauce.","J'adore l'attiéké avec du poisson."],ko:["아침에는 빵을 먹어요.","점심에는 소스 곁들인 밥을 먹어요.","생선 곁들인 아티에케를 정말 좋아해요."],q:'점심에 무엇을 먹나요?',a:'소스 곁들인 밥',x:['빵','생선','바나나','닭고기']},
-{topic:'학교',lines:["Je vais à l'école à sept heures.","Ma maîtresse est très gentille.","J'aime les mathématiques."],ko:["저는 7시에 학교에 가요.","선생님은 아주 친절하세요.","저는 수학을 좋아해요."],q:'몇 시에 학교에 가나요?',a:'7시',x:['6시','8시','9시','10시']},
-{topic:'취미',lines:["Le samedi, je joue au football avec mes amis.","J'aime aussi la musique.","Je chante et je danse."],ko:["토요일엔 친구들이랑 축구를 해요.","음악도 좋아해요.","노래하고 춤춰요."],q:'토요일에 무엇을 하나요?',a:'친구들과 축구',x:['수영','그림 그리기','공부','요리']},
-{topic:'신앙·교회',lines:["Le dimanche, je vais à l'église avec ma famille.","Je chante pour Dieu.","Je prie tous les jours."],ko:["일요일엔 가족과 교회에 가요.","하나님께 찬양해요.","매일 기도해요."],q:'일요일에 누구와 교회에 가나요?',a:'가족',x:['친구','혼자','선생님','이웃']},
-{topic:'건강',lines:["Aujourd'hui, je suis malade.","J'ai mal au ventre.","Je vais chez le docteur."],ko:["오늘 저는 아파요.","배가 아파요.","병원(의사 선생님께)에 가요."],q:'어디가 아픈가요?',a:'배',x:['머리','이','다리','눈']},
-{topic:'장보기',lines:["Je vais au marché avec maman.","On achète des tomates et des bananes.","Tout coûte deux mille francs."],ko:["엄마랑 시장에 가요.","토마토랑 바나나를 사요.","다 해서 2,000프랑이에요."],q:'모두 얼마인가요?',a:'2,000프랑',x:['1,000프랑','500프랑','3,000프랑','5,000프랑']},
-{topic:'여행',lines:["Pendant les vacances, je vais à Yamoussoukro.","Je prends le car avec mon papa.","Je visite la grande basilique."],ko:["방학 동안 야무수크로에 가요.","아빠랑 시외버스를 타요.","큰 대성당을 구경해요."],q:'무엇을 타고 가나요?',a:'시외버스',x:['택시','기차','비행기','배']},
-{topic:'직업',lines:["Je suis infirmière.","Je travaille à l'hôpital.","J'aide les malades tous les jours."],ko:["저는 간호사예요.","병원에서 일해요.","매일 아픈 사람들을 도와요."],q:'어디에서 일하나요?',a:'병원',x:['학교','시장','교회','은행']},
-{topic:'하루 일과',lines:["Je me lève à six heures.","Je me lave et je m'habille.","Puis je prends mon petit-déjeuner."],ko:["6시에 일어나요.","씻고 옷을 입어요.","그다음 아침을 먹어요."],q:'몇 시에 일어나나요?',a:'6시',x:['5시','7시','8시','9시']},
-{topic:'동물',lines:["J'ai un petit chien.","Il s'appelle Bobi.","Il est noir et blanc et il aime jouer."],ko:["작은 강아지가 있어요.","이름은 보비예요.","검은색과 흰색이고 노는 걸 좋아해요."],q:'강아지는 무슨 색인가요?',a:'검은색과 흰색',x:['갈색','흰색만','검은색만','노란색']},
-{topic:'우리 집',lines:["Ma maison est petite.","Il y a deux chambres et une cuisine.","Ma chambre est bleue."],ko:["우리 집은 작아요.","방 두 개랑 부엌 하나가 있어요.","제 방은 파란색이에요."],q:'방은 몇 개인가요?',a:'2개',x:['1개','3개','4개','5개']},
-{topic:'친구',lines:["Mon meilleur ami s'appelle Koffi.","Il a dix ans.","On joue ensemble après l'école."],ko:["제일 친한 친구 이름은 코피예요.","열 살이에요.","학교 끝나고 같이 놀아요."],q:'친구는 몇 살인가요?',a:'10살',x:['8살','9살','11살','12살']},
-{topic:'생일',lines:["Demain, c'est mon anniversaire.","J'aurai huit ans.","Maman va faire un gâteau."],ko:["내일은 제 생일이에요.","여덟 살이 돼요.","엄마가 케이크를 만들어 주실 거예요."],q:'엄마가 무엇을 만들어 주시나요?',a:'케이크',x:['빵','밥','주스','선물']},
-];
-const LTYPES={pic:'🖼️ 듣고 알맞은 그림 고르기',mean:'🎧 듣고 알맞은 뜻 고르기',reply:'💬 듣고 알맞은 대답 고르기',place:'📍 대화를 듣고 장소·상황 고르기',detail:'🔎 듣고 내용 고르기',topic:'📚 이야기를 듣고 주제 고르기'};
+// ---------- 👂 듣기 평가 (A1~A2): 내가 저장한 표현을 실제 상황 역할극 속에서 들어요 ----------
+// 동기화가 연결되어 있으면 Claude가 아비장 생활 상황(시장·택시·교회…) 대화를 만들어 줘요. 안 되면 내 표현으로 기본 문제를 만들어요.
+const LTYPES={reply:'💬 상대 말에 알맞은 대답 고르기',meaning:'🎧 들은 말의 뜻 고르기',detail:'🔎 대화 내용 고르기',situation:'📍 어떤 상황인지 고르기',mean:'🎧 들은 말의 뜻 고르기',heard:'👂 들은 문장 고르기'};
+const QUIZ_URL=TR_URL.replace(/\/translate$/,'/quiz');
 let L=null;
 const pick=(a,n)=>shuffle(a).slice(0,n);
-function opts5(right,pool){const o=[right];for(const x of shuffle(pool)){if(o.length>=5)break;if(!o.includes(x))o.push(x)}return shuffle(o)}
-function lMake(n){
-  const it=[...Object.values(PITEMS),...S.items.filter(x=>!PITEMS[x.id])];
-  const sent=it.filter(x=>x.kind==='문장'&&x.ko&&x.pack!=='v'&&!/^pv\d{3}$/.test(x.id)),word=it.filter(x=>x.pack==='w');
-  const withPic=word; // 그림 문제는 그림이 뜻을 딱 하나로 보여 주는 기초 단어만 써요
-  const per=Math.ceil(n/6),Q=[];
-  // 🖼️ 그림 (단어·문장 섞어서, 그림이 서로 다른 것만)
-  pick(withPic,per*3).forEach(x=>{if(Q.filter(q=>q.t==='pic').length>=per)return;const e=imgOf(x).v,others=[...new Set(withPic.map(y=>imgOf(y).v).filter(v=>v!==e))];if(others.length<4)return;Q.push({t:'pic',say:[x.fr],ans:e,opts:opts5(e,others),fr:[x.fr],ko:[x.ko],pron:x.pron,id:x.id})});
-  // 🎧 뜻
-  pick(sent,per).forEach(x=>{const dis=[...new Set(sent.filter(y=>y.ko!==x.ko).map(y=>y.ko))];Q.push({t:'mean',say:[x.fr],ans:x.ko,opts:opts5(x.ko,dis),fr:[x.fr],ko:[x.ko],pron:x.pron,id:x.id})});
-  // 💬 대답
-  pick(LQA,per).forEach(([q,a,qk,ak,k])=>{const dis=LQA.filter(z=>z[4]!==k).map(z=>z[1]);Q.push({t:'reply',say:[q],ans:a,opts:opts5(a,dis),fr:[q,a],ko:[qk,ak],fropt:true})});
-  // 📍 장소 / 🔎 세부
-  pick(LDIA,per*2).forEach((d,i)=>{const lines={say:d.lines,fr:d.lines,ko:d.ko,dia:true};
-    if(i%2===0)Q.push({...lines,t:'place',ans:d.at,opts:opts5(d.at,LDIA.map(z=>z.at)),qtext:'이 대화는 어디에서 하는 대화일까요?'});
-    else Q.push({...lines,t:'detail',ans:d.a,opts:shuffle([d.a,...d.x]),qtext:d.q})});
-  // 📚 주제 / 🔎 세부
-  pick(LMONO,per*2).forEach((m,i)=>{const lines={say:m.lines,fr:m.lines,ko:m.ko};
-    if(i%2===0)Q.push({...lines,t:'topic',ans:m.topic,opts:opts5(m.topic,LMONO.map(z=>z.topic)),qtext:'이 이야기의 주제는 무엇일까요?'});
-    else Q.push({...lines,t:'detail',ans:m.a,opts:shuffle([m.a,...m.x]),qtext:m.q})});
-  return shuffle(Q).slice(0,n);
+function opts5(right,pool){const o=[right];for(const x of shuffle(pool)){if(o.length>=5)break;if(x&&!o.includes(x))o.push(x)}return shuffle(o)}
+function lSource(k){
+  const mine=S.items.filter(x=>x.fr&&x.ko);
+  const pri=mine.filter(x=>x.added>=daysAgo(13)||S.wrong[x.id]);
+  const rest=mine.filter(x=>!pri.includes(x));
+  return [...pick(pri,k),...pick(rest,k)].slice(0,k);
+}
+function lLocal(src,n){
+  const all=S.items.filter(x=>x.fr&&x.ko),koPool=[...new Set(all.map(x=>x.ko))],frPool=[...new Set(all.map(x=>x.fr))];
+  const pk=Object.values(typeof PITEMS!=='undefined'?PITEMS:{}).filter(x=>x.kind==='문장');
+  const Q=[];
+  src.slice(0,n).forEach((x,i)=>{
+    if(i%2===0)Q.push({t:'mean',say:[x.fr],who:['상대'],fr:[x.fr],ko:[x.ko],ans:x.ko,opts:opts5(x.ko,[...koPool,...pk.map(y=>y.ko)].filter(k=>k!==x.ko)),qtext:'잘 듣고, 알맞은 뜻을 고르세요.',id:x.id});
+    else Q.push({t:'heard',say:[x.fr],who:['상대'],fr:[x.fr],ko:[x.ko],ans:x.fr,opts:opts5(x.fr,[...frPool,...pk.map(y=>y.fr)].filter(f=>f!==x.fr)),qtext:'잘 듣고, 들은 문장을 고르세요.',id:x.id});
+  });
+  return Q;
+}
+async function lMake(n){
+  const src=lSource(Math.max(n,8));
+  if(src.length<3)throw new Error('저장한 표현이 3개 이상 있어야 해요');
+  if(syncOn()){
+    try{
+      const c=new AbortController(),tm=setTimeout(()=>c.abort(),60000);
+      const r=await fetch(QUIZ_URL,{method:'POST',signal:c.signal,headers:{'Content-Type':'application/json','X-Sync-Token':SYNC.token},body:JSON.stringify({items:src.map(x=>({fr:x.fr,ko:x.ko})),n})});
+      clearTimeout(tm);
+      const j=r.ok?await r.json():null;
+      const qs=(j&&j.questions||[]).filter(q=>q.lines&&q.lines.length&&q.answer&&(q.distractors||[]).length>=2).map(q=>({
+        t:LTYPES[q.kind]?q.kind:'detail',scene:q.scene,qtext:q.question,say:q.lines.map(l=>l.fr),who:q.lines.map(l=>l.who),fr:q.lines.map(l=>l.fr),ko:q.lines.map(l=>l.ko),
+        ans:q.answer,ansKo:q.answer_ko,opts:shuffle([q.answer,...q.distractors.filter(d=>d!==q.answer).slice(0,4)]),explain:q.explain,id:(src[q.target]||{}).id,ai:true}));
+      if(qs.length>=Math.min(3,n))return qs.slice(0,n);
+    }catch(_){}
+    toast('상황 문제를 못 만들어서 기본 문제로 낼게요',2600);
+  }
+  return lLocal(src,n);
 }
 async function lPlay(slow){
   if(!L)return;const q=L.qs[L.i],my=L.play=(L.play||0)+1;
   const b=$('#lplay');if(b)b.classList.add('on');
   for(let k=0;k<q.say.length;k++){
     if(!L||L.play!==my)return;
-    await speakP(q.say[k],slow,q.dia?(k%2?1:0):0);
+    await speakP(q.say[k],slow,q.who?(q.who[k]==='나'?0:1):0);
     await sleep(q.say.length>1?450:0);
   }
   if(L&&L.play===my){const b2=$('#lplay');if(b2)b2.classList.remove('on')}
 }
-function lStart(n){L={qs:lMake(n),i:0,res:[],picked:null};lDraw();setTimeout(()=>lPlay(false),300)}
+async function lStart(n){
+  const my={loading:true};L=my;
+  $('#view').innerHTML=`<div class="card" style="text-align:center;padding:30px 16px"><div style="font-size:40px">🎭</div><h2>내 표현으로 상황 문제를 만드는 중…</h2><div class="muted">시장·택시·교회 같은 실제 상황 대화를 만들고 있어요 (10~30초)</div></div>`;
+  let qs;try{qs=await lMake(n)}catch(e){if(L===my){L=null;toast(e.message,3000);render()}return}
+  if(L!==my)return;
+  L={qs,i:0,res:[],picked:null};lDraw();setTimeout(()=>lPlay(false),300);
+}
 function lDraw(){
+  if(L&&L.loading)return;
   const q=L.qs[L.i],done=L.picked!==null,ok=done&&L.picked===q.ans;
   const opt=(o,k)=>{const cls=!done?'':o===q.ans?'good':o===L.picked?'bad':'';
     return `<button class="lopt ${q.t==='pic'?'pic5':''} ${cls}" data-o="${k}" ${done?'disabled':''}><b>${'①②③④⑤'[k]}</b> ${q.t==='pic'?`<span>${esc(o)}</span>`:esc(o)}</button>`};
   $('#view').innerHTML=`<div class="card">
     <div class="row" style="justify-content:space-between"><span class="qtype">${LTYPES[q.t]}</span><span class="muted">${L.i+1} / ${L.qs.length}</span></div>
     <div class="bar"><i style="width:${L.i/L.qs.length*100}%"></i></div>
-    <div style="font-size:17px;font-weight:600;margin:4px 0 10px">${q.qtext?esc(q.qtext):q.t==='pic'?'잘 듣고, 들은 내용과 맞는 그림을 고르세요.':q.t==='mean'?'잘 듣고, 알맞은 뜻을 고르세요.':'잘 듣고, 이어질 대답으로 가장 알맞은 것을 고르세요.'}</div>
-    <div class="play"><button class="btn" id="lplay">🔊 ${q.say.length>1?(q.dia?'대화 듣기':'이야기 듣기'):'듣기'}</button><button class="btn" id="lslow">🐢 천천히</button></div>
+    ${q.scene?`<div class="muted" style="margin-top:6px">🎭 ${esc(q.scene)}</div>`:''}
+    <div style="font-size:17px;font-weight:600;margin:4px 0 10px">${esc(q.qtext||'잘 듣고 알맞은 것을 고르세요.')}</div>
+    <div class="play"><button class="btn" id="lplay">🔊 ${q.say.length>1?'대화 듣기':'듣기'}</button><button class="btn" id="lslow">🐢 천천히</button></div>
     <div class="lopts ${q.t==='pic'?'pics':''}">${q.opts.map(opt).join('')}</div>
-    ${done?`<div class="fb ${ok?'ok':'no'}">${ok?'⭕ 정답!':'❌ 정답은 '+esc(q.ans)}</div>
-      <div class="script"><div class="muted" style="margin-bottom:4px">📜 들은 내용</div>${q.fr.map((f,k)=>`<div class="sl"><button class="ib" data-say="${esc(f)}">🔊</button><div><div class="fr">${q.dia?`<b>${k%2?'B':'A'}:</b> `:''}${esc(f)}</div>${q.pron&&k===0?`<div class="pron">${esc(q.pron)}</div>`:''}<div class="muted">${esc(q.ko[k]||'')}</div></div></div>`).join('')}</div>
+    ${done?`<div class="fb ${ok?'ok':'no'}">${ok?'⭕ 정답!':'❌ 정답은 '+esc(q.ans)}${q.ansKo&&q.ansKo!==q.ans?`<div class="muted">${esc(q.ansKo)}</div>`:''}${q.explain?`<div style="margin-top:4px;font-size:14px">💡 ${esc(q.explain)}</div>`:''}</div>
+      <div class="script"><div class="muted" style="margin-bottom:4px">📜 들은 내용</div>${q.fr.map((f,k)=>`<div class="sl"><button class="ib" data-say="${esc(f)}">🔊</button><div><div class="fr">${q.who&&q.say.length>1?`<b>${esc(q.who[k])}:</b> `:''}${esc(f)}</div>${q.pron&&k===0?`<div class="pron">${esc(q.pron)}</div>`:''}<div class="muted">${esc(q.ko[k]||'')}</div></div></div>`).join('')}</div>
       <button class="btn pri big" id="lnext" style="margin-top:12px">${L.i+1<L.qs.length?'다음 문제 →':'결과 보기'}</button>`
       :'<div class="muted" style="margin-top:10px;font-size:13px">💡 몇 번이든 다시 들어도 돼요. 소리만 듣고 골라 보세요.</div>'}
   </div>`;
   $('#lplay').onclick=()=>lPlay(false);$('#lslow').onclick=()=>lPlay(true);
   document.querySelectorAll('.lopt').forEach(b=>b.onclick=()=>{
     if(L.picked!==null)return;L.picked=q.opts[+b.dataset.o];L.play++;ttsStop();
-    L.res.push({t:q.t,ok:L.picked===q.ans,id:q.id});lDraw();
+    const okk=L.picked===q.ans;L.res.push({t:q.t,ok:okk,id:q.id});
+    const it=q.id&&S.items.find(x=>x.id===q.id);if(it){const at=it.att||(it.att=[]);at.push({d:today(),t:'listen',ok:okk});if(at.length>60)at.splice(0,at.length-60);save()}
+    lDraw();
   });
   const nx=$('#lnext');if(nx)nx.onclick=()=>{if(L.i+1<L.qs.length){L.i++;L.picked=null;lDraw();scrollTo(0,0);setTimeout(()=>lPlay(false),250)}else lEnd()};
 }
@@ -2658,7 +2618,7 @@ function lEnd(){
   const by={};r.forEach(x=>{by[x.t]=by[x.t]||[0,0];by[x.t][1]++;if(x.ok)by[x.t][0]++});
   const pct=Math.round(score/r.length*100);
   L=null;
-  $('#view').innerHTML=`<div class="card" style="text-align:center"><h2>👂 듣기 평가 결과</h2>
+  $('#view').innerHTML=`<div class="card" style="text-align:center"><h2>👂 듣기 평가 결과 (A1~A2)</h2>
     <div style="font-size:44px;font-weight:800;color:var(--accent)">${score} / ${r.length}</div>
     <div class="muted">${pct>=90?'🎉 귀가 열리고 있어요! Bravo !':pct>=70?'👍 잘했어요! 조금만 더!':pct>=50?'💪 좋아요. 틀린 유형을 다시 들어 봐요.':'🌱 처음엔 다 이래요. 매일 10문제씩 들으면 귀가 열려요!'}</div>
     <div style="text-align:left;margin-top:14px">${Object.entries(by).map(([t,[o,a]])=>`<div class="row" style="justify-content:space-between;padding:6px 0;border-top:1px solid var(--line)"><span>${LTYPES[t]}</span><b>${o}/${a}</b></div>`).join('')}</div>
@@ -2668,13 +2628,49 @@ function lEnd(){
 }
 function listenCard(){
   const runs=S.history.filter(h=>h.s==='listen'),last=runs[runs.length-1];
-  return `<div class="card"><h2>👂 듣기 평가 (A1 · 초등 수준)</h2>
-    <div class="muted" style="margin-bottom:10px">수능 듣기처럼 듣고 ①~⑤ 중에 고르는 문제예요. 그림 고르기 · 뜻 고르기 · 알맞은 대답 · 대화 장소 · 내용 · 이야기 주제가 섞여 나와요. <b>할 때마다 새 문제</b>로 바뀌어요.</div>
+  return `<div class="card"><h2>👂 듣기 평가 (A1~A2 · 내가 배운 표현으로)</h2>
+    <div class="muted" style="margin-bottom:10px">내가 저장한 표현이 <b>시장 · 택시 · 교회 · 이웃</b> 같은 실제 상황 역할극 대화 속에 나와요. 듣고 ①~⑤ 중에 골라요: 알맞은 대답 · 뜻 · 대화 내용 · 상황. <b>할 때마다 새 문제</b>예요.</div>
     ${last?`<div class="muted" style="margin-bottom:8px">지난번: ${last.score}/${last.total} (${esc(last.d.slice(5).replace('-','/'))} ${esc(last.at)}) · 지금까지 ${runs.length}번</div>`:''}
-    <div class="row"><button class="btn pri" id="lgo10" style="flex:1">👂 10문제 시작</button><button class="btn" id="lgo20" style="flex:1">20문제</button></div>
+    <div class="row"><button class="btn pri" id="lgo10" style="flex:1">👂 5문제</button><button class="btn" id="lgo20" style="flex:1">10문제</button></div>
   </div>`;
 }
-function bindListenCard(){const a=$('#lgo10'),b=$('#lgo20');if(a)a.onclick=()=>lStart(10);if(b)b.onclick=()=>lStart(20)}
+// 📊 내 시험 기록: 최근 14일 · 정답률 · 가장 약한 표현
+const ATT_T={say:'🗣️ 말하기',dict:'✍️ 받아쓰기',listen:'👂 듣기 평가',spell:'✍️ 쓰기',speak:'🗣️ 따라 읽기',both:'🎧 뜻+불어'};
+function statsCard(){
+  const days=[...Array(14)].map((_,i)=>daysAgo(13-i)),per={};days.forEach(d=>per[d]={n:0,ok:0});
+  let tot=0,ok=0,tested=0;
+  S.items.forEach(x=>{const a=x.att||[];if(a.length)tested++;a.forEach(z=>{tot++;if(z.ok)ok++;if(per[z.d]){per[z.d].n++;if(z.ok)per[z.d].ok++}})});
+  const mx=Math.max(1,...days.map(d=>per[d].n));
+  const weak=S.items.map(x=>{const a=(x.att||[]).slice(-10),w=a.filter(z=>!z.ok).length;return {x,w,n:a.length}}).filter(z=>z.w).sort((a,b)=>b.w/b.n-a.w/a.n||b.w-a.w).slice(0,5);
+  return `<div class="card"><h2>📊 내 시험 기록</h2>
+    ${tot?`<div class="stat4" style="grid-template-columns:repeat(3,1fr)"><div><b>${tot}</b><span>푼 문제</span></div><div><b>${Math.round(ok/tot*100)}%</b><span>정답률</span></div><div><b>${tested}</b><span>시험 본 표현</span></div></div>
+    <div class="muted" style="font-size:12px">최근 14일 · 막대 높이 = 푼 문제 수, 초록 = 맞힌 문제</div>
+    <div class="bars14">${days.map(d=>`<div style="height:${per[d].n/mx*100}%" title="${d} ${per[d].ok}/${per[d].n}"><i style="height:${per[d].n?per[d].ok/per[d].n*100:0}%"></i></div>`).join('')}</div>
+    <div class="row muted" style="justify-content:space-between;font-size:11px"><span>${days[0].slice(5).replace('-','/')}</span><span>오늘</span></div>
+    ${weak.length?`<label class="f">가장 약한 표현 (최근 10번 기준 · 누르면 자세히)</label>${weak.map(({x,w,n})=>`<div class="item"><div class="t" data-st="${esc(x.id)}"><div class="fr">${frG(x.fr)}</div><div class="muted">${esc(x.ko)}</div></div><b style="color:var(--bad);white-space:nowrap">${w}/${n} 틀림</b></div>`).join('')}`:''}`
+    :'<div class="muted">아직 기록이 없어요. 시험을 보면 표현마다 몇 번 시험 봤고 몇 번 틀렸는지 쌓여요.</div>'}
+  </div>`;
+}
+function openStat(id){
+  const x=byId(id);if(!x)return;
+  const a=x.att||[],okN=a.filter(z=>z.ok).length,rec=((typeof mvSum==='function'?mvSum():{})[id]||{}).n||0,said=saidTotal(id),w=S.wrong[id];
+  const by={};a.forEach(z=>{(by[z.t]=by[z.t]||[0,0])[1]++;if(z.ok)by[z.t][0]++});
+  const m=document.createElement('div');m.className='ovl';
+  m.innerHTML=`<div class="card" style="max-width:460px;margin:8vh auto 0">
+    <div class="row" style="justify-content:space-between;align-items:flex-start"><div><div class="fr" style="font-size:20px;font-weight:700">${frG(x.fr)}</div>${x.pron?`<div class="pron">${esc(x.pron)}</div>`:''}<div class="muted">${esc(x.ko)}</div></div>
+      <button class="ib" data-x title="닫기">✕</button></div>
+    <div class="row" style="margin-top:8px;gap:6px"><button class="btn sm" data-say="${esc(x.fr)}">🔊 듣기</button><span class="muted" style="font-size:13px">저장: ${esc(String(x.added||'').replace(/-/g,'/'))}${w?` · <b style="color:var(--bad)">오답노트 (${w.count}번 틀림)</b>`:''}</span></div>
+    <div class="stbox"><div><b>${a.length}</b><span class="muted">시험 본 횟수</span></div><div><b>${a.length?Math.round(okN/a.length*100)+'%':'-'}</b><span class="muted">정답률 (${okN}/${a.length})</span></div>
+      <div><b>${rec}</b><span class="muted">내 목소리 녹음</span></div><div><b>${said}</b><span class="muted">따라 말한 횟수</span></div></div>
+    ${Object.entries(by).map(([t,[o,n]])=>`<div class="row" style="justify-content:space-between;padding:4px 0;border-top:1px solid var(--line)"><span>${ATT_T[t]||t}</span><b>${o}/${n} 맞음</b></div>`).join('')}
+    ${a.length?`<label class="f">날짜별 기록 (최근 → 예전)</label><div class="tl">${a.slice().reverse().slice(0,30).map(z=>`<span class="${z.ok?'o':'x'}">${z.ok?'⭕':'❌'} ${z.d.slice(5).replace('-','/')} ${(ATT_T[z.t]||'').split(' ')[0]}</span>`).join('')}</div>`
+      :`<div class="muted" style="margin-top:6px">${x.right||x.wrong?`예전 기록: ${x.right||0}번 맞음 · ${x.wrong||0}번 틀림 (날짜별 기록은 지금부터 쌓여요)`:'아직 시험 기록이 없어요.'}</div>`}
+  </div>`;
+  m.onclick=e=>{if(e.target===m||e.target.closest('[data-x]'))m.remove()};
+  document.body.appendChild(m);
+}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-st]');if(!b||e.target.closest('button,a,input,select,textarea,[data-pic]'))return;openStat(b.dataset.st)});
+function bindListenCard(){const a=$('#lgo10'),b=$('#lgo20');if(a)a.onclick=()=>lStart(5);if(b)b.onclick=()=>lStart(10)}
 
 // ---------- ☁️ 기기 간 동기화 (GitHub 비공개 저장소의 data.json) ----------
 // 기록을 작은 조각(표현 1개, 하루 할 일, 하루 일기…)으로 나눠 조각마다 마지막 수정 시각을 기억하고,
@@ -2822,6 +2818,7 @@ function setSync(s){
   const el=$('#sync');if(el){el.textContent=m[0];el.title=m[1]}
   const st=$('#syst');if(st)st.textContent=m[1]?'· '+m[1]:'';
 }
+$('#setb').onclick=()=>{if(T&&!T.done)return;go('list')};
 $('#sync').onclick=()=>{if(T&&!T.done)return;go('list');setTimeout(()=>$('#sycard')?.scrollIntoView({behavior:'smooth'}),50)};
 document.addEventListener('visibilitychange',()=>{
   if(!syncOn())return;
