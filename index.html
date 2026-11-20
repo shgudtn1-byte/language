@@ -75,6 +75,7 @@ label.f{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
 .ln-btns{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
 .lb{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:6px 11px;cursor:pointer;white-space:nowrap}
 .lb small{color:var(--muted);font-size:11px}.lb:disabled{opacity:.4;cursor:default}
+.lb.fresh{background:var(--good-soft);border-color:var(--good)}
 .lb.say.on{border-color:var(--accent);color:var(--accent)}
 .lb.rec.going{background:#d93025;border-color:#d93025;color:#fff;animation:mvpulse 1s infinite}
 @keyframes mvpulse{50%{opacity:.65}}
@@ -1094,7 +1095,7 @@ function mvDB(){
   return MV.db;
 }
 const mvK=id=>PROF+':'+id;
-async function mvAll(id){const db=await mvDB();return new Promise((res,rej)=>{const q=db.transaction('rec').objectStore('rec').index('k').getAll(mvK(id));q.onsuccess=()=>res(q.result.sort((a,b)=>a.at-b.at));q.onerror=()=>rej(q.error)})}
+async function mvAll(id){const db=await mvDB();return new Promise((res,rej)=>{const q=db.transaction('rec').objectStore('rec').index('k').getAll(mvK(id));q.onsuccess=()=>res(q.result.sort((a,b)=>a.at-b.at||a.n-b.n));q.onerror=()=>rej(q.error)})}
 async function mvDel(id,ns){const db=await mvDB();
   // 다른 기기에도 올라간 녹음이면, 클라우드에서도 지우도록 적어 둬요
   const gone=(await mvAll(id)).filter(r=>ns.includes(r.n)&&r.synced&&r.rid).map(r=>mvPath(id,r));
@@ -1142,7 +1143,7 @@ async function mvRecord(id){
     const sec=(Date.now()-t0)/1000;
     if(!chunks.length||sec<0.7){toast('너무 짧아요. 🎙️ 누르고 말한 뒤 ⏹ 를 눌러 주세요',2800);return}
     const blob=new Blob(chunks,{type:mr.mimeType||type||'audio/webm'});
-    try{await mvPut(id,blob,sec);lnRowRefresh(id);toast('🎙️ 저장했어요 — ▶️ 내 목소리로 들어 보세요',2400)}
+    try{await mvPut(id,blob,sec);lnRowRefresh(id);const nb=document.querySelector(`.ln-row[data-id="${CSS.escape(id)}"] [data-act=me]`);if(nb){nb.classList.add('fresh');setTimeout(()=>nb.classList.remove('fresh'),2500)}toast('🎙️ 최신 녹음으로 바뀌었어요 — ▶️ 내 목소리로 들어 보세요',2400)}
     catch(_){toast('녹음을 저장하지 못했어요')}
   };
   mr.start();MV.timer=setTimeout(()=>{if(mr.state==='recording')mr.stop()},30000);
@@ -1193,12 +1194,18 @@ async function mvSyncRun(){
     const id=r.k.slice(PROF.length+1);
     if(!r.rid){r.rid=r.at+'-'+Math.random().toString(36).slice(2,6);r.synced=false;await mvSave(r)}
     const p=mvPath(id,r);local.add(p);
-    if(remote.has(p)){if(!r.synced){r.synced=true;await mvSave(r)}continue}
-    if(r.synced){if(full&&tr.ok){await mvRemove([r.n]);changed.add(id)}continue}
+    if(remote.has(p)){if(!r.synced){r.synced=true;r.syncedAt=Date.now();await mvSave(r)}continue}
+    if(r.synced){
+      if(full&&tr.ok&&Date.now()-(r.syncedAt||r.at)>600000){
+        const chk=await mvGh('contents/'+mvUrlPath(p));
+        if(chk.status===404){await mvRemove([r.n]);changed.add(id)}
+      }
+      continue;
+    }
     const body=JSON.stringify({message:'녹음: '+id,content:await mvB64(r.blob)});
     let u=await mvGh('contents/'+mvUrlPath(p),{method:'PUT',body});
     if(u.status===409){await new Promise(z=>setTimeout(z,1500));u=await mvGh('contents/'+mvUrlPath(p),{method:'PUT',body})}
-    if(u.ok||u.status===422){r.synced=true;await mvSave(r)}
+    if(u.ok||u.status===422){r.synced=true;r.syncedAt=Date.now();await mvSave(r)}
   }
   // 3) 다른 기기에서 녹음한 건 받아와요
   for(const p of remote.keys()){
