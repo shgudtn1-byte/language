@@ -30,6 +30,7 @@ nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px
 nav button{flex:1;max-width:128px;background:none;border:0;padding:8px 2px 12px;color:var(--muted);font:inherit;font-size:12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
 nav button b{font-size:20px;font-weight:400}
 nav button.on{color:var(--accent);font-weight:600}
+nav button span{white-space:nowrap}nav button[data-tab=listen] span{font-size:11px;letter-spacing:-.05em}
 .badge{background:var(--bad);color:#fff;border-radius:10px;padding:0 6px;font-size:11px;margin-left:2px}
 button.btn{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:10px 14px;cursor:pointer}
 button.btn:hover{border-color:var(--accent)}
@@ -70,7 +71,15 @@ label.f{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
 .ln-row{display:flex;width:100%;gap:12px;align-items:center;text-align:left;font:inherit;color:var(--ink);background:none;border:0;border-top:1px solid var(--line);padding:13px 4px;cursor:pointer}
 .ln-row .ln-t{flex:1;min-width:0}.ln-row .ln-fr{font-size:18px;font-weight:600;line-height:1.3}
 .ln-row .ln-p{font-size:13px;color:var(--muted);margin-top:2px}.ln-row .ln-k{font-size:14px;margin-top:2px}
-.ln-row .ln-i{font-size:24px;flex:none}.ln-row.on{background:var(--good-soft)}
+.ln-row{display:block;cursor:default}.ln-row .ln-t{cursor:pointer}.ln-row.on{background:var(--good-soft)}
+.ln-btns{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.lb{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:6px 11px;cursor:pointer;white-space:nowrap}
+.lb small{color:var(--muted);font-size:11px}.lb:disabled{opacity:.4;cursor:default}
+.lb.say.on{border-color:var(--accent);color:var(--accent)}
+.lb.rec.going{background:#d93025;border-color:#d93025;color:#fff;animation:mvpulse 1s infinite}
+@keyframes mvpulse{50%{opacity:.65}}
+.mv-hist{margin-top:8px;padding:8px 10px;border:1px dashed var(--line);border-radius:10px;font-size:13px}
+.mv-hist .mv-h{display:flex;align-items:center;gap:6px;padding:3px 0}.mv-hist .mv-h span{flex:1}
 nav button{min-width:0}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{font:inherit;font-size:13px;padding:6px 10px;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--ink);cursor:pointer}
@@ -489,7 +498,7 @@ document.addEventListener('click',e=>{
 
 // ---------- 내비 ----------
 let tab=location.hash==='#listen'?'listen':'home';
-const TABS=[['home','🏠','오늘'],['add','✏️','저장'],['speak','🎧','스피킹'],['listen','🔊','듣기'],['test','📝','테스트'],['wrong','📕','오답노트'],['list','📚','목록']];
+const TABS=[['home','🏠','오늘'],['add','✏️','저장'],['speak','🎧','스피킹'],['listen','🎙️','듣고말하기'],['test','📝','테스트'],['wrong','📕','오답노트'],['list','📚','목록']];
 function renderNav(){
   const wc=Object.keys(S.wrong).filter(byId).length;
   $('#nav').innerHTML=TABS.map(([k,i,l])=>`<button class="${tab===k?'on':''}" data-tab="${k}"><b>${i}</b><span>${l}${k==='wrong'&&wc?`<span class="badge">${wc}</span>`:''}</span></button>`).join('');
@@ -998,7 +1007,7 @@ function vWrong(){
 
 // ---------- 목록 + 설정 ----------
 let q='';
-const vNow=()=>syncOn()?'서버 음성 (듣기 탭과 같은 목소리)':(pickVoice()?.name||'기기 기본 음성');
+const vNow=()=>syncOn()?'서버 음성 (듣고 말하기 탭과 같은 목소리)':(pickVoice()?.name||'기기 기본 음성');
 function vList(){
   const list=S.items.filter(x=>!q||(x.fr+' '+x.ko).toLowerCase().includes(q.toLowerCase())).slice().reverse();
   const st=S.settings;
@@ -1035,6 +1044,85 @@ function vList(){
   $('#file').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{const d=JSON.parse(t);if(!Array.isArray(d.items))throw 0;if(confirm(`${d.items.length}개 표현으로 덮어쓸까요?`)){S=d;fix();save();render();toast('불러왔어요')}}catch(_){toast('올바른 백업 파일이 아니에요')}})};
 }
 
+// ---------- 🎙️ 내 목소리 녹음: 이 기기(IndexedDB)에 저장 ----------
+// 표현마다 첫 녹음은 항상 남기고, 최근 녹음 19개까지 보관해서 성장을 비교할 수 있어요
+var MV={db:null,rec:null,id:null,timer:0,url:null};
+const myAudio=new Audio();
+const MVS_KEY='frstudy.myvoice.'+PROF;
+function mvSum(){try{return JSON.parse(localStorage.getItem(MVS_KEY))||{}}catch(_){return {}}}
+function mvSumSet(id,all){const s=mvSum();if(all.length)s[id]={n:all.length,first:all[0].at,last:all[all.length-1].at};else delete s[id];try{localStorage.setItem(MVS_KEY,JSON.stringify(s))}catch(_){}}
+function mvWhen(t){const d=new Date(t),n=new Date();const hm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  return d.toDateString()===n.toDateString()?'오늘 '+hm:(d.getMonth()+1)+'/'+d.getDate()+' '+hm}
+function mvDB(){
+  if(!MV.db){MV.db=new Promise((res,rej)=>{const r=indexedDB.open('frstudy.voice',1);
+    r.onupgradeneeded=()=>{const s=r.result.createObjectStore('rec',{keyPath:'n',autoIncrement:true});s.createIndex('k','k')};
+    r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});MV.db.catch(()=>{MV.db=null})}
+  return MV.db;
+}
+const mvK=id=>PROF+':'+id;
+async function mvAll(id){const db=await mvDB();return new Promise((res,rej)=>{const q=db.transaction('rec').objectStore('rec').index('k').getAll(mvK(id));q.onsuccess=()=>res(q.result.sort((a,b)=>a.at-b.at));q.onerror=()=>rej(q.error)})}
+async function mvDel(id,ns){const db=await mvDB();await new Promise((res,rej)=>{const t=db.transaction('rec','readwrite');ns.forEach(n=>t.objectStore('rec').delete(n));t.oncomplete=res;t.onerror=()=>rej(t.error)});mvSumSet(id,await mvAll(id))}
+async function mvPut(id,blob,sec){
+  const db=await mvDB();
+  await new Promise((res,rej)=>{const t=db.transaction('rec','readwrite');t.objectStore('rec').add({k:mvK(id),at:Date.now(),blob,type:blob.type,sec});t.oncomplete=res;t.onerror=()=>rej(t.error)});
+  let all=await mvAll(id);
+  if(all.length>20){await mvDel(id,all.slice(1,all.length-19).map(r=>r.n));all=await mvAll(id)}
+  mvSumSet(id,all);
+}
+function mvStopPlay(){try{myAudio.pause();myAudio.onended=null}catch(_){}if(MV.url){URL.revokeObjectURL(MV.url);MV.url=null}}
+// 아이폰은 누른 순간에 소리를 열어 둬야 나중에 재생돼요
+function mvUnlock(){try{myAudio.src=LN_SILENT;myAudio.play().catch(()=>{})}catch(_){}}
+async function mvPlay(id,n,done){
+  if(!done){lnStop();mvUnlock()}
+  let all;try{all=await mvAll(id)}catch(_){return toast('녹음을 불러오지 못했어요')}
+  const r=n?all.find(x=>x.n===n):all[all.length-1];
+  if(!r){toast('아직 녹음이 없어요. 🎙️ 녹음을 눌러 말해 보세요',2500);return}
+  mvStopPlay();MV.url=URL.createObjectURL(r.blob);myAudio.src=MV.url;myAudio.playbackRate=1;
+  myAudio.onended=()=>{done&&done()};
+  myAudio.play().catch(()=>toast('재생하지 못했어요'));
+}
+// 원어민 → 내 목소리 이어서 듣기
+function mvCompare(x,n){
+  lnStop();mvUnlock();
+  lnPlay(x,()=>setTimeout(()=>mvPlay(x.id,n,()=>{}),450));
+}
+function lnRecMark(){document.querySelectorAll('.ln-row').forEach(b=>{const r=b.querySelector('.lb.rec');if(!r)return;const on=MV.rec&&b.dataset.id===MV.id;r.classList.toggle('going',!!on);r.textContent=on?'⏹ 멈추기 (말하는 중)':'🎙️ 녹음'})}
+function lnRowRefresh(id){const b=document.querySelector(`.ln-row[data-id="${CSS.escape(id)}"]`),x=S.items.find(i=>i.id===id);if(!b||!x)return;const t=document.createElement('div');t.innerHTML=lnRowHtml(x);b.replaceWith(t.firstElementChild)}
+async function mvRecord(id){
+  if(MV.rec){const same=MV.id===id;MV.rec.stop();if(same)return}
+  lnStop();
+  if(!window.MediaRecorder||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){toast('이 화면에서는 녹음이 안 돼요. Chrome이나 Safari로 열어 주세요',3500);return}
+  let stream;
+  try{const tr=await micTrack();stream=tr?new MediaStream([tr]):await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}})}
+  catch(_){toast('마이크 권한을 허용해 주세요',3000);return}
+  const type=['audio/webm;codecs=opus','audio/mp4','audio/webm','audio/ogg;codecs=opus'].find(t=>MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(t));
+  let mr;try{mr=new MediaRecorder(stream,type?{mimeType:type}:undefined)}catch(_){mr=new MediaRecorder(stream)}
+  const chunks=[],t0=Date.now();MV.rec=mr;MV.id=id;
+  mr.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
+  mr.onstop=async()=>{
+    stream.getTracks().forEach(t=>t.stop());clearTimeout(MV.timer);if(MV.rec===mr){MV.rec=null;MV.id=null}lnRecMark();
+    const sec=(Date.now()-t0)/1000;
+    if(!chunks.length||sec<0.7){toast('너무 짧아요. 🎙️ 누르고 말한 뒤 ⏹ 를 눌러 주세요',2800);return}
+    const blob=new Blob(chunks,{type:mr.mimeType||type||'audio/webm'});
+    try{await mvPut(id,blob,sec);lnRowRefresh(id);toast('🎙️ 저장했어요 — ▶️ 내 목소리로 들어 보세요',2400)}
+    catch(_){toast('녹음을 저장하지 못했어요')}
+  };
+  mr.start();MV.timer=setTimeout(()=>{if(mr.state==='recording')mr.stop()},30000);
+  lnRecMark();
+}
+// 📈 지금까지의 녹음: 첫 녹음과 최근 녹음을 비교해서 얼마나 늘었는지 들어 봐요
+async function mvHist(row,x){
+  const old=row.querySelector('.mv-hist');if(old){old.remove();return}
+  const all=await mvAll(x.id);if(!all.length)return;
+  const box=document.createElement('div');box.className='mv-hist';
+  box.innerHTML=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+    <button class="lb" data-act="cmp" data-n="${all[0].n}">🔁 원어민 → 첫 녹음</button>
+    <button class="lb" data-act="cmp" data-n="${all[all.length-1].n}">🔁 원어민 → 최근 녹음</button></div>`+
+    all.slice().reverse().map((r,i)=>`<div class="mv-h"><span>${all.length-i}번째 · ${mvWhen(r.at)}${r.n===all[0].n?' <b>(첫 녹음)</b>':i===0?' <b>(최근)</b>':''}</span>
+    <button class="ib" data-act="hp" data-n="${r.n}" title="듣기">▶️</button><button class="ib" data-act="hd" data-n="${r.n}" title="지우기">🗑️</button></div>`).join('');
+  row.appendChild(box);
+}
+
 // ---------- 🔊 듣기: 찾아서 한 번 누르면 바로 재생 ----------
 var LN={q:'',f:'all',slow:false,all:false,run:0};
 const lnKey=t=>String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[’`]/g,"'");
@@ -1048,10 +1136,10 @@ function lnList(){
     return !q||lnKey(x.fr+' '+x.ko+' '+(x.pron||'')).includes(q);
   }).slice().reverse();
 }
-function lnMark(id){document.querySelectorAll('.ln-row').forEach(b=>{const on=b.dataset.id===id;b.classList.toggle('on',on);b.querySelector('.ln-i').textContent=on?'🔉':'🔊'})}
-function lnStop(){LN.all=false;LN.run++;ttsStop();lnMark('');const b=$('#lnall');if(b)b.textContent='▶ 전체 듣기'}
+function lnMark(id){document.querySelectorAll('.ln-row').forEach(b=>{const on=b.dataset.id===id;b.classList.toggle('on',on);const s=b.querySelector('.lb.say');if(s){s.classList.toggle('on',on);s.textContent=on?'🔉 원어민':'🔊 원어민'}})}
+function lnStop(){LN.all=false;LN.run++;ttsStop();mvStopPlay();if(MV.rec&&MV.rec.state==='recording')MV.rec.stop();lnMark('');const b=$('#lnall');if(b)b.textContent='▶ 전체 듣기'}
 function lnPlay(x,done){
-  const run=++LN.run;lnMark(x.id);ttsStop();lnAudio.preservesPitch=true;lnAudio.webkitPreservesPitch=true;
+  const run=++LN.run;lnMark(x.id);ttsStop();mvStopPlay();lnAudio.preservesPitch=true;lnAudio.webkitPreservesPitch=true;
   const end=()=>{if(run!==LN.run)return;lnMark('');done&&done()};
   // 기기 음성은 기계음이 심해서 서버 음성을 먼저 써요. 안 되면 기기 음성으로 읽어요.
   const fallback=()=>{if(run!==LN.run)return;if(hasTTS)ttsPlay(x.fr,LN.slow?0.72:S.settings.rate,false,end);else{toast('소리를 불러오지 못했어요');end()}};
@@ -1069,14 +1157,23 @@ function lnAll(){
     const el=document.querySelector(`.ln-row[data-id="${CSS.escape(x.id)}"]`);if(el)el.scrollIntoView({block:'center',behavior:'smooth'})};
   next();
 }
+function lnRowHtml(x){
+  const s=mvSum()[x.id];
+  return `<div class="ln-row" data-id="${esc(x.id)}"><div class="ln-t" data-act="say"><div class="ln-fr">${frG(x.fr)}</div>${x.pron?`<div class="ln-p">${esc(x.pron)}</div>`:''}<div class="ln-k">${esc(x.ko)}</div></div>
+    <div class="ln-btns"><button class="lb say" data-act="say">🔊 원어민</button>
+    <button class="lb" data-act="me" ${s?'':'disabled'}>▶️ 내 목소리${s?` <small>${mvWhen(s.last)}</small>`:''}</button>
+    <button class="lb rec" data-act="rec">🎙️ 녹음</button>
+    ${s&&s.n>1?`<button class="lb" data-act="hist">📈 ${s.n}번</button>`:''}</div></div>`;
+}
 function lnRows(){
   const list=lnList(),shown=list.slice(0,300);
   $('#lncount').textContent=list.length+'개';
-  $('#lnrows').innerHTML=shown.length?shown.map(x=>`<button class="ln-row" data-id="${esc(x.id)}"><span class="ln-t"><div class="ln-fr">${frG(x.fr)}</div>${x.pron?`<div class="ln-p">${esc(x.pron)}</div>`:''}<div class="ln-k">${esc(x.ko)}</div></span><span class="ln-i">🔊</span></button>`).join('')+(list.length>300?'<div class="muted" style="padding:10px 4px">앞의 300개만 보여요. 검색으로 찾아 주세요.</div>':''):'<div class="empty">찾는 표현이 없어요</div>';
+  $('#lnrows').innerHTML=shown.length?shown.map(x=>lnRowHtml(x)).join('')+(list.length>300?'<div class="muted" style="padding:10px 4px">앞의 300개만 보여요. 검색으로 찾아 주세요.</div>':''):'<div class="empty">찾는 표현이 없어요</div>';
 }
 function vListen(){
   if(!voices.length)loadVoices();
-  $('#view').innerHTML=`<div class="card"><div class="ln-top"><h2>듣기 <small class="muted" id="lncount"></small></h2>
+  $('#view').innerHTML=`<div class="card"><div class="ln-top"><h2>듣고 말하기 <small class="muted" id="lncount"></small></h2>
+    <div class="muted" style="font-size:13px;margin:-4px 0 8px">🔊 원어민 발음 → 🎙️ 내가 녹음 → ▶️ 내 목소리로 비교해요. 녹음은 이 기기에 저장돼요.</div>
     <input type="search" id="lnq" placeholder="불어, 뜻, 발음으로 찾기" value="${esc(LN.q)}" autocomplete="off">
     <div class="chips" style="margin-top:8px">${LN_F.map(([k,l])=>`<button class="chip ${LN.f===k?'on':''}" data-lf="${k}">${l}</button>`).join('')}</div>
     <div class="ln-tools"><button class="btn sm" id="lnall">▶ 전체 듣기</button><button class="btn sm" id="lnslow">${LN.slow?'🐢 천천히 켜짐':'🐢 천천히'}</button></div>
@@ -1088,7 +1185,15 @@ function vListen(){
   $('#lnslow').onclick=()=>{LN.slow=!LN.slow;$('#lnslow').textContent=LN.slow?'🐢 천천히 켜짐':'🐢 천천히'};
   $('#lnall').onclick=lnAll;
   $('#lnrows').onclick=e=>{const b=e.target.closest('.ln-row');if(!b)return;const x=S.items.find(i=>i.id===b.dataset.id);if(!x)return;
-    const same=b.classList.contains('on');LN.all=false;$('#lnall').textContent='▶ 전체 듣기';if(same){lnStop();return}lnPlay(x)};
+    const a=e.target.closest('[data-act]'),act=a&&a.dataset.act;if(!act)return;
+    if(act==='say'){const same=b.classList.contains('on');LN.all=false;$('#lnall').textContent='▶ 전체 듣기';if(same){lnStop();return}lnPlay(x);return}
+    if(act==='me')return mvPlay(x.id);
+    if(act==='rec')return mvRecord(x.id);
+    if(act==='hist')return mvHist(b,x);
+    if(act==='hp')return mvPlay(x.id,+a.dataset.n);
+    if(act==='cmp')return mvCompare(x,+a.dataset.n);
+    if(act==='hd'){if(!confirm('이 녹음을 지울까요?'))return;mvDel(x.id,[+a.dataset.n]).then(()=>{lnRowRefresh(x.id);const nb=document.querySelector(`.ln-row[data-id="${CSS.escape(x.id)}"]`);if(nb&&mvSum()[x.id])mvHist(nb,x)})}
+  };
 }
 
 // ---------- 관리자: 나의 모든 기록 ----------
