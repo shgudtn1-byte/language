@@ -106,6 +106,8 @@ nav button{min-width:0}
 .lopt{font:inherit;text-align:left;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);cursor:pointer;line-height:1.4}
 .lopt b{color:var(--accent);margin-right:4px}.lopt:hover:not(:disabled){border-color:var(--accent)}
 .lopt.pic5{text-align:center;padding:8px 2px;display:flex;flex-direction:column;align-items:center;gap:2px}.lopt.pic5 span{font-size:30px;line-height:1.2}
+.lopt.sel{border-color:var(--accent);background:var(--soft)}
+.dq{margin:16px 0 4px}.dq .lopts{margin-top:8px}.dcons{font-style:italic;margin:6px 0 2px}
 .lopt.good{background:var(--good-soft);border-color:var(--good)}.lopt.bad{background:var(--bad-soft);border-color:var(--bad)}.lopt:disabled{cursor:default}
 #lplay.on{border-color:var(--accent);color:var(--accent)}
 .script{background:var(--bg);border-radius:10px;padding:10px 12px;margin-top:10px}.sl{display:flex;gap:8px;align-items:flex-start;padding:4px 0}
@@ -217,7 +219,7 @@ function seed(){
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&Array.isArray(d.items))return d}catch(e){}return seed()}
 function save(){if(typeof onSaved==='function')onSaved();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 let S=load();
-function fix(){S.settings=S.settings||{};if(S.settings.voiceV!==2){S.settings.voiceV=2;S.settings.voice='';if(S.settings.rate===0.9)S.settings.rate=0.95}S.items.forEach(x=>{if(!x.pack&&!/^p[swgcbvh]\d{3}$/.test(x.id))x.kind=kindOf(x.fr)});S.todos=S.todos||{};S.diary=S.diary||{};S.history=S.history||[];S.settings=S.settings||{};S.wrong=S.wrong||{};S.log=S.log||{};S.stamp=S.stamp||{};S.speak=S.speak||{};S.quiz=S.quiz||{};
+function fix(){S.settings=S.settings||{};if(S.settings.voiceV!==2){S.settings.voiceV=2;S.settings.voice='';if(S.settings.rate===0.9)S.settings.rate=0.95}S.items.forEach(x=>{if(!x.pack&&!/^p[swgcbvh]\d{3}$/.test(x.id))x.kind=kindOf(x.fr)});S.todos=S.todos||{};S.diary=S.diary||{};S.history=S.history||[];S.settings=S.settings||{};S.wrong=S.wrong||{};S.log=S.log||{};S.stamp=S.stamp||{};S.speak=S.speak||{};S.quiz=S.quiz||{};S.delf=S.delf||{};
   S.settings.wtypes=Object.assign({say:true,speak:true,spell:false,dict:false},S.settings.wtypes||{});S.settings.sp=Object.assign({goalMin:60,goalReps:300,reps:5,pause:'mid',mode:(window.SpeechRecognition||window.webkitSpeechRecognition)?'mic':'auto',show:'text',scope:'least',slowFirst:true,pk:'s',cat:'👋 인사'},S.settings.sp||{})}
 fix();
 
@@ -517,6 +519,7 @@ function go(t){
   if(t!=='speak'&&typeof SP!=='undefined'&&SP)spEnd();
   if(tab==='listen'&&t!=='listen')lnStop();
   if(t!=='test'&&typeof L!=='undefined'&&L){L=null;ttsStop()}
+  if(t!=='test'&&typeof DX!=='undefined'&&DX){DX=null;ttsStop()}
   if(t!=='admin'&&location.hash==='#admin'){try{history.replaceState(null,'',location.pathname+location.search)}catch(_){}}
   tab=t;render();scrollTo(0,0);
 }
@@ -838,6 +841,7 @@ function mtPool(){
   return a;
 }
 function vTest(){
+  if(DX)return dxDraw();
   if(T)return vQuestion();
   if(L)return lDraw();
   const t=S.settings.mtypes||(S.settings.mtypes={say:true,dict:!ONLY_SAY});
@@ -857,6 +861,7 @@ function vTest(){
     <div style="margin-top:14px"><button class="btn pri big" id="go">시작하기 (<span id="n"></span>문제)</button></div>
   </div>
   ${ONLY_SAY?'':listenCard()}
+  ${ONLY_SAY?'':delfCard()}
   ${statsCard()}`;
   const sync=()=>{document.querySelectorAll('.seg[data-mk]').forEach(s=>s.querySelectorAll('button').forEach(b=>b.classList.toggle('on',String(MT[s.dataset.mk])===b.dataset.v)));
     $('#mtdaybox').classList.toggle('hide',MT.scope!=='day');$('#n').textContent=Math.min(mtPool().length,MT.count)};
@@ -864,7 +869,7 @@ function vTest(){
   $('#mtday').onchange=e=>{MT.day=e.target.value;sync()};
   document.querySelectorAll('[data-mtype]').forEach(c=>c.onchange=()=>{t[c.dataset.mtype]=c.checked;save()});
   $('#go').onclick=()=>startTest();
-  bindListenCard();sync();
+  bindListenCard();bindDelf();sync();
 }
 function pool(){return mtPool()}
 function startTest(mode){
@@ -2665,6 +2670,113 @@ function listenCard(){
     <div class="muted" style="font-size:12px;margin-top:4px">복습은 틀린 문제 → 안 푼 문제 → 오래전에 푼 문제 순서로 나와요. 보기 순서는 매번 바뀌어요.</div>`})()}
   </div>`;
 }
+// ---------- 🎓 DELF 모의 듣기 (A1·A2와 같은 구성 · 매번 새 문제 · 쌓아서 다시 보기) ----------
+// 공식 기출문제를 옮기지 않고, 같은 형식(연습 4개 · 25점 · 두 번 듣기 · 보기 A/B/C)으로 새로 만들어요.
+const DELF_URL=TR_URL.replace(/\/translate$/,'/delf');
+var DX=null;
+const delfList=()=>Object.entries(S.delf||{}).sort((a,b)=>(b[1].ts||0)-(a[1].ts||0));
+function delfCard(){
+  const all=delfList();
+  return `<div class="card" id="delfcard"><h2>🎓 DELF 모의 듣기 시험</h2>
+    <div class="muted" style="margin-bottom:10px">실제 DELF 듣기와 같은 구성이에요: <b>연습 4개 · 25점 · 녹음은 두 번</b> · 보기 A/B/C. 공식 기출을 옮긴 것이 아니라 같은 형식으로 새로 만든 문제예요. 만든 시험은 아래에 쌓여서 몇 번이든 다시 볼 수 있어요.</div>
+    <div class="row"><button class="btn pri" data-dnew="A1" style="flex:1">🆕 A1 새 시험</button><button class="btn pri" data-dnew="A2" style="flex:1">🆕 A2 새 시험</button></div>
+    ${all.length?`<label class="f">🗂️ 내 DELF 시험 (${all.length}회)</label>${all.map(([k,r],i)=>{const tr=r.tries||[],best=tr.length?Math.max(...tr.map(t=>t.score)):0;
+      return `<div class="item"><div class="t"><b>${esc(r.level)} · ${all.length-i}회차</b><div class="muted" style="font-size:13px">${esc(String(r.at).slice(5).replace('-','/'))} 만듦 · ${tr.length?`${tr.length}번 봄 · 최고 ${best}/25 · 최근 ${tr[tr.length-1].score}/25`:'아직 안 봄'}</div></div><button class="btn sm" data-dgo="${k}">▶ 시험 보기</button></div>`}).join('')}`
+      :'<div class="muted" style="font-size:13px;margin-top:8px">🗂️ 아직 만든 시험이 없어요. 새 시험을 만들면 여기에 쌓여요.</div>'}
+  </div>`;
+}
+function bindDelf(){
+  document.querySelectorAll('[data-dnew]').forEach(b=>b.onclick=()=>delfNew(b.dataset.dnew));
+  document.querySelectorAll('[data-dgo]').forEach(b=>b.onclick=()=>delfStart(b.dataset.dgo));
+}
+async function delfNew(level){
+  if(!syncOn()){toast('DELF 시험은 ☁️ 동기화를 연결한 기기에서 만들 수 있어요',3500);return}
+  const my={loading:true};DX=my;
+  $('#view').innerHTML=`<div class="card" style="text-align:center;padding:30px 16px"><div style="font-size:40px">🎓</div><h2>DELF ${level} 모의고사를 만드는 중…</h2><div class="muted">연습 4개의 녹음 대본과 문제를 만들고 있어요 (1~2분)</div></div>`;
+  try{
+    const c=new AbortController(),tm=setTimeout(()=>c.abort(),180000);
+    const r=await fetch(DELF_URL,{method:'POST',signal:c.signal,headers:{'Content-Type':'application/json','X-Sync-Token':SYNC.token},body:JSON.stringify({level})});
+    clearTimeout(tm);
+    const j=await r.json().catch(()=>null);
+    if(!r.ok||!j||!Array.isArray(j.exercises)||!j.exercises.length)throw new Error((j&&j.error)||('서버 '+r.status));
+    if(DX!==my)return;
+    const id='d'+Date.now().toString(36);
+    S.delf[id]={at:today(),ts:Date.now(),level,exam:j,tries:[]};save();
+    delfStart(id);
+  }catch(e){if(DX===my){DX=null;toast('시험을 만들지 못했어요: '+(e.name==='AbortError'?'시간이 너무 걸렸어요':e.message),4000);render()}}
+}
+function delfStart(id){
+  const r=S.delf[id];if(!r)return;
+  const steps=[];r.exam.exercises.forEach((ex,ei)=>(ex.docs||[]).forEach((d,di)=>steps.push({ei,di})));
+  DX={id,steps,i:0,ans:{},plays:{},practice:false,ko:false,done:false,run:0};tab='test';render();scrollTo(0,0);
+}
+const dxWho=w=>w==='B'?1:0;
+async function dxPlay(){
+  const r=S.delf[DX.id],st=DX.steps[DX.i],doc=r.exam.exercises[st.ei].docs[st.di],key=st.ei+'.'+st.di;
+  if(DX.playing){DX.run++;ttsStop();DX.playing=false;dxDraw();return}
+  if(!DX.practice&&(DX.plays[key]||0)>=2)return;
+  const run=++DX.run;DX.playing=true;dxDraw();
+  for(const l of doc.lines){if(!DX||DX.run!==run)return;await speakP(l.fr,false,dxWho(l.who));await sleep(380)}
+  if(!DX||DX.run!==run)return;
+  DX.plays[key]=(DX.plays[key]||0)+1;DX.playing=false;dxDraw();
+}
+function dxDraw(){
+  if(!DX||DX.loading)return;
+  if(DX.done)return dxResult();
+  const r=S.delf[DX.id],st=DX.steps[DX.i],ex=r.exam.exercises[st.ei],doc=ex.docs[st.di],key=st.ei+'.'+st.di;
+  const pl=DX.plays[key]||0,left=Math.max(0,2-pl),last=DX.i===DX.steps.length-1;
+  const firstOfEx=st.di===0;
+  $('#view').innerHTML=`<div class="card">
+    <div class="row" style="justify-content:space-between"><span class="qtype">🎓 DELF ${esc(r.level)} · ${esc(ex.title_ko)}</span><span class="muted">${DX.i+1} / ${DX.steps.length}</span></div>
+    <div class="bar"><i style="width:${DX.i/DX.steps.length*100}%"></i></div>
+    <div class="dcons">${esc(ex.consigne_fr)}</div><div class="muted" style="font-size:13px">${esc(ex.consigne_ko)}</div>
+    <div style="margin-top:10px;font-weight:600">🎧 ${esc(doc.kind||'녹음')}${ex.docs.length>1?` · ${st.di+1}/${ex.docs.length}`:''}</div>
+    <div class="play"><button class="btn ${DX.playing?'on':''}" id="dxplay" ${!DX.practice&&left===0&&!DX.playing?'disabled':''}>${DX.playing?'⏹ 멈추기':`▶ 녹음 듣기 ${DX.practice?'(연습 모드)':`(남은 횟수 ${left}/2)`}`}</button></div>
+    ${firstOfEx&&pl===0&&!DX.playing?'<div class="muted" style="font-size:13px">💡 실제 시험처럼 먼저 문제를 읽고 녹음을 들으세요.</div>':''}
+    <div class="row" style="gap:14px;margin-top:6px;font-size:13px"><label><input type="checkbox" id="dxprac" ${DX.practice?'checked':''}> 연습 모드 (몇 번이든 듣기)</label><label><input type="checkbox" id="dxko" ${DX.ko?'checked':''}> 🇰🇷 한국어 보기</label></div>
+    ${doc.questions.map((q,qi)=>{const k=key+'.'+qi,a=DX.ans[k];return `<div class="dq"><b>${qi+1}. ${esc(q.q_fr)}</b> <small class="muted">(${q.points}점)</small>${DX.ko?`<div class="muted" style="font-size:13px">${esc(q.q_ko)}</div>`:''}
+      <div class="lopts">${q.options_fr.map((o,oi)=>`<button class="lopt ${a===oi?'sel':''}" data-dk="${k}" data-do="${oi}"><b>${'ABC'[oi]}</b> ${esc(o)}${DX.ko&&q.options_ko[oi]?`<div class="muted" style="font-size:12px">${esc(q.options_ko[oi])}</div>`:''}</button>`).join('')}</div></div>`}).join('')}
+    <div class="row" style="margin-top:14px">${DX.i?'<button class="btn" id="dxprev">← 이전</button>':''}<button class="btn pri" id="dxnext" style="flex:1">${last?'✅ 제출하고 채점하기':'다음 →'}</button></div>
+    <button class="btn sm" id="dxquit" style="margin-top:10px">시험 그만두기</button>
+  </div>`;
+  $('#dxplay').onclick=dxPlay;
+  $('#dxprac').onchange=e=>{DX.practice=e.target.checked;dxDraw()};
+  $('#dxko').onchange=e=>{DX.ko=e.target.checked;dxDraw()};
+  document.querySelectorAll('[data-dk]').forEach(b=>b.onclick=()=>{DX.ans[b.dataset.dk]=+b.dataset.do;document.querySelectorAll(`[data-dk="${b.dataset.dk}"]`).forEach(x=>x.classList.toggle('sel',x===b))});
+  const pv=$('#dxprev');if(pv)pv.onclick=()=>{DX.run++;ttsStop();DX.playing=false;DX.i--;dxDraw();scrollTo(0,0)};
+  $('#dxnext').onclick=()=>{
+    const miss=doc.questions.some((q,qi)=>DX.ans[key+'.'+qi]===undefined);
+    if(miss&&!confirm('답하지 않은 문제가 있어요. 넘어갈까요?'))return;
+    DX.run++;ttsStop();DX.playing=false;
+    if(last)return dxSubmit();
+    DX.i++;dxDraw();scrollTo(0,0);
+  };
+  $('#dxquit').onclick=()=>{if(!confirm('시험을 그만둘까요? (만든 시험은 보관함에 남아요)'))return;DX.run++;ttsStop();DX=null;render()};
+}
+function dxSubmit(){
+  const r=S.delf[DX.id];let got=0,tot=0;const per=[];
+  r.exam.exercises.forEach((ex,ei)=>{let g=0,t=0;(ex.docs||[]).forEach((d,di)=>d.questions.forEach((q,qi)=>{const p=+q.points||1;t+=p;if(DX.ans[ei+'.'+di+'.'+qi]===q.answer)g+=p}));per.push({name:ex.title_ko,g,t});got+=g;tot+=t});
+  const sc=Math.round((tot?got/tot*25:0)*2)/2;
+  (r.tries||(r.tries=[])).push({d:today(),at:timeNow(),score:sc});save();
+  DX.done=true;DX.result={sc,per};dxDraw();scrollTo(0,0);
+}
+function dxResult(){
+  const r=S.delf[DX.id],{sc,per}=DX.result;
+  $('#view').innerHTML=`<div class="card" style="text-align:center"><h2>🎓 DELF ${esc(r.level)} 듣기 결과</h2>
+    <div style="font-size:44px;font-weight:800;color:var(--accent)">${sc} / 25</div>
+    <div class="muted">${sc>=20?'🎉 아주 좋아요! 실전도 자신 있게!':sc>=12.5?'👍 합격권이에요. 틀린 문제의 대본을 다시 들어 봐요.':sc>=5?'💪 영역 최소 점수(5점)는 넘었어요. 대본을 보며 다시 들어 봐요.':'🌱 5점 미만이면 과락이에요. 연습 모드로 대본과 함께 들어 봐요.'}</div>
+    <div class="muted" style="font-size:12px;margin-top:4px">DELF 합격: 4개 영역 합계 50/100 이상 · 영역마다 최소 5/25</div>
+    <div style="text-align:left;margin-top:12px">${per.map(p=>`<div class="row" style="justify-content:space-between;padding:6px 0;border-top:1px solid var(--line)"><span>${esc(p.name)}</span><b>${p.g} / ${p.t}</b></div>`).join('')}</div></div>
+  ${r.exam.exercises.map((ex,ei)=>`<div class="card"><h2>${esc(ex.title_ko)}</h2>${(ex.docs||[]).map((d,di)=>`
+    <div class="script"><div class="muted" style="margin-bottom:4px">📜 ${esc(d.kind||'녹음')} 대본</div>${d.lines.map(l=>`<div class="sl"><button class="ib" data-say="${esc(l.fr)}">🔊</button><div><div class="fr">${l.who!=='N'?`<b>${esc(l.who)}:</b> `:''}${esc(l.fr)}</div><div class="muted">${esc(l.ko)}</div></div></div>`).join('')}</div>
+    ${d.questions.map((q,qi)=>{const a=DX.ans[ei+'.'+di+'.'+qi];return `<div class="dq"><b>${esc(q.q_fr)}</b><div class="muted" style="font-size:13px">${esc(q.q_ko)}</div>
+      <div class="lopts">${q.options_fr.map((o,oi)=>`<div class="lopt ${oi===q.answer?'good':oi===a?'bad':''}"><b>${'ABC'[oi]}</b> ${esc(o)} <span class="muted" style="font-size:12px">${esc(q.options_ko[oi]||'')}</span>${oi===q.answer?' ✅':oi===a?' ❌ 내 답':''}</div>`).join('')}</div>
+      <div style="font-size:13px;margin-top:6px">💡 ${esc(q.explain_ko)}${a===undefined?' <b style="color:var(--bad)">(답 안 함)</b>':''}</div></div>`}).join('')}`).join('')}</div>`).join('')}
+  <div class="row"><button class="btn pri" id="dxagain" style="flex:1">🔁 이 시험 다시 보기</button><button class="btn" id="dxback" style="flex:1">테스트 화면으로</button></div>`;
+  $('#dxagain').onclick=()=>delfStart(DX.id);
+  $('#dxback').onclick=()=>{DX=null;render();scrollTo(0,0)};
+}
+
 // 📊 내 시험 기록: 최근 14일 · 정답률 · 가장 약한 표현
 const ATT_T={say:'🗣️ 말하기',dict:'✍️ 받아쓰기',listen:'👂 듣기 평가',spell:'✍️ 쓰기',speak:'🗣️ 따라 읽기',both:'🎧 뜻+불어'};
 function statsCard(){
@@ -2720,6 +2832,7 @@ function parts(s){
   for(const d in s.log||{})p['log:'+d]=JSON.stringify(s.log[d]);
   for(const d in s.speak||{})p['speak:'+d]=JSON.stringify(s.speak[d]);
   for(const k in s.quiz||{})p['quiz:'+k]=JSON.stringify(s.quiz[k]);
+  for(const k in s.delf||{})p['delf:'+k]=JSON.stringify(s.delf[k]);
   p.wrong=JSON.stringify(s.wrong||{});p.settings=JSON.stringify(s.settings||{});
   return p;
 }
@@ -2737,12 +2850,12 @@ function onSaved(){
   syncTimer=setTimeout(()=>{syncTimer=null;syncNow()},drilling?60000:4000);
 }
 function rebuild(p,base){
-  const s={...base,items:[],todos:{},diary:{},log:{},speak:{},wrong:{},settings:{},quiz:{}};
+  const s={...base,items:[],todos:{},diary:{},log:{},speak:{},wrong:{},settings:{},quiz:{},delf:{}};
   for(const k in p){
     const v=JSON.parse(p[k]);
     if(k==='wrong'){s.wrong=v;continue}if(k==='settings'){s.settings=v;continue}
     const i=k.indexOf(':'),t=k.slice(0,i),id=k.slice(i+1);
-    if(t==='item')s.items.push(v);else if(t==='todos')s.todos[id]=v;else if(t==='diary')s.diary[id]=v;else if(t==='log')s.log[id]=v;else if(t==='speak')s.speak[id]=v;else if(t==='quiz')s.quiz[id]=v;
+    if(t==='item')s.items.push(v);else if(t==='todos')s.todos[id]=v;else if(t==='diary')s.diary[id]=v;else if(t==='log')s.log[id]=v;else if(t==='speak')s.speak[id]=v;else if(t==='quiz')s.quiz[id]=v;else if(t==='delf')s.delf[id]=v;
   }
   s.items.sort((a,b)=>a.added<b.added?-1:a.added>b.added?1:0);
   return s;
