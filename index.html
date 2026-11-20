@@ -830,7 +830,7 @@ const TYPES={
 };
 const setup={session:null,scope:'all',count:15};
 // 📝 내가 저장한 표현 시험: 범위(오늘·날짜·7일·전체·틀린 것) + 문제 수
-var MT={scope:'today',day:'',count:999};
+var MT={scope:ONLY_SAY?'today':'all',day:'',count:999};
 let T=null;
 function mtPool(){
   let a=S.items;
@@ -849,16 +849,16 @@ function vTest(){
   const nT=S.items.filter(x=>x.added===today()).length;
   $('#view').innerHTML=`
   <div class="card"><h2>📝 내가 저장한 표현 시험</h2>
-    <div class="muted">기본은 <b>오늘 저장한 표현 전부</b>예요. ${ONLY_SAY?'':'고른 표현이 <b>DELF 듣기 형식</b>(안내 방송·음성 메시지·대화, 두 번 듣기, A/B/C, 25점) 시험 속에 모두 들어가요.'}</div>
+    <div class="muted">${ONLY_SAY?'기본은 <b>오늘 저장한 표현 전부</b>예요.':`기본은 <b>지금까지 배운 표현 전체를 종합한 시험</b>이에요 (${S.items.length}개). 표현이 <b>DELF 듣기 형식</b>(안내 방송·음성 메시지·대화, 두 번 듣기, A/B/C, 25점) 시험 속에 들어가요. 범위를 바꿔 오늘 것·특정 날짜만 볼 수도 있어요.`}</div>
     ${ONLY_SAY?`<div class="muted" style="margin-top:8px">🇰🇷→🗣️ ${esc(ME.n)}님 시험은 <b>한국어 보고 불어로 말하기</b>로만 나와요.</div>`:''}
     <label class="f">범위</label>
-    <div class="seg wrap" data-mk="scope"><button data-v="today">오늘 (${nT})</button><button data-v="day">📅 날짜 고르기</button><button data-v="week">최근 7일</button><button data-v="all">전체</button><button data-v="wrong">틀린 것</button></div>
+    <div class="seg wrap" data-mk="scope">${ONLY_SAY?'':`<button data-v="all">📚 전체 종합 (${S.items.length})</button>`}<button data-v="today">오늘 (${nT})</button><button data-v="day">📅 날짜 고르기</button><button data-v="week">최근 7일</button>${ONLY_SAY?'<button data-v="all">전체</button>':''}<button data-v="wrong">틀린 것</button></div>
     <div id="mtdaybox" style="margin-top:8px" class="${MT.scope==='day'?'':'hide'}"><select id="mtday">${days.map(([d,n])=>`<option value="${d}" ${d===MT.day?'selected':''}>${dayFull(d)} — ${n}개</option>`).join('')}</select></div>
     ${ONLY_SAY?`<label class="f">문제 수</label>
     <div class="seg" data-mk="count"><button data-v="10">10</button><button data-v="20">20</button><button data-v="999">전부</button></div>
     <div style="margin-top:14px"><button class="btn pri big" id="go">시작하기 (<span id="n"></span>문제)</button></div>`
     :`<div style="margin-top:14px"><button class="btn pri big" id="mdelf">🎓 DELF 형식으로 시험 보기 (<span id="nd"></span>개 표현)</button></div>
-    <div class="muted" style="font-size:12px;margin-top:4px">시험지를 만드는 데 1~2분 걸려요. 만든 시험은 아래 🗂️ 내 DELF 시험에 쌓여서 다시 볼 수 있어요. 표현이 30개보다 많으면 틀린 것과 최근 것 위주로 30개를 골라요.</div>
+    <div class="muted" style="font-size:12px;margin-top:4px">시험지를 만드는 데 1~2분 걸려요. 만든 시험은 아래 🗂️ 내 DELF 시험에 쌓여서 다시 볼 수 있어요. 한 시험에 30개까지 들어가요. 더 많으면 틀린 것 → 아직 안 본 것 → 오래전에 본 것 순서로 골라서, 시험을 볼 때마다 모든 표현이 골고루 돌아가요.</div>
     <details style="margin-top:12px"><summary class="muted" style="cursor:pointer">🗣️✍️ 말하기 · 받아쓰기로 보기</summary>
       <div class="opts" style="margin-top:8px">${['say','dict'].map(k=>`<label><input type="checkbox" data-mtype="${k}" ${t[k]?'checked':''}><span><b>${TYPES[k][0]}</b><small>${TYPES[k][1]}</small></span></label>`).join('')}</div>
       <label class="f">문제 수</label>
@@ -878,8 +878,14 @@ function vTest(){
   const md=$('#mdelf');if(md)md.onclick=()=>{
     let pool=mtPool().filter(x=>x.fr&&x.ko);
     if(pool.length<3){toast('이 범위에 표현이 3개 이상 있어야 해요. 범위를 바꿔 보세요',3000);return}
-    if(pool.length>30){const pri=shuffle(pool.filter(x=>S.wrong[x.id])),rest=pool.filter(x=>!S.wrong[x.id]).sort((a,b)=>a.added<b.added?1:-1);pool=[...pri,...rest].slice(0,30)}
-    const lab={today:'오늘',day:dayFull(MT.day),week:'최근 7일',all:'전체',wrong:'틀린 것'}[MT.scope]||'';
+    // 30개가 넘으면 시험마다 골고루 돌아가요: 오답노트 → 아직 시험 안 본 것 → 오래전에 시험 본 것 (같으면 무작위)
+    if(pool.length>30){
+      const lastT=x=>{const a=x.att||[];return a.length?a[a.length-1].d:''};
+      const wr=shuffle(pool.filter(x=>S.wrong[x.id])).slice(0,10);
+      const rest=shuffle(pool.filter(x=>!wr.includes(x))).sort((a,b)=>lastT(a)<lastT(b)?-1:lastT(a)>lastT(b)?1:0);
+      pool=[...wr,...rest].slice(0,30);
+    }
+    const lab={today:'오늘',day:dayFull(MT.day),week:'최근 7일',all:'전체 종합',wrong:'틀린 것'}[MT.scope]||'';
     delfNew('A2',{items:pool,label:`내 표현 · ${lab} ${pool.length}개`});
   };
   bindListenCard();bindDelf();sync();
