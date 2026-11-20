@@ -849,26 +849,39 @@ function vTest(){
   const nT=S.items.filter(x=>x.added===today()).length;
   $('#view').innerHTML=`
   <div class="card"><h2>📝 내가 저장한 표현 시험</h2>
-    <div class="muted">기본은 <b>오늘 저장한 표현 전부</b>예요. 날짜를 골라 그날 것만 볼 수도 있어요.</div>
-    ${ONLY_SAY?`<div class="muted" style="margin-top:8px">🇰🇷→🗣️ ${esc(ME.n)}님 시험은 <b>한국어 보고 불어로 말하기</b>로만 나와요.</div>`
-      :`<label class="f">시험 유형 (고른 것이 번갈아 나와요)</label>
-    <div class="opts">${['say','dict'].map(k=>`<label><input type="checkbox" data-mtype="${k}" ${t[k]?'checked':''}><span><b>${TYPES[k][0]}</b><small>${TYPES[k][1]}</small></span></label>`).join('')}</div>`}
+    <div class="muted">기본은 <b>오늘 저장한 표현 전부</b>예요. ${ONLY_SAY?'':'고른 표현이 <b>DELF 듣기 형식</b>(안내 방송·음성 메시지·대화, 두 번 듣기, A/B/C, 25점) 시험 속에 모두 들어가요.'}</div>
+    ${ONLY_SAY?`<div class="muted" style="margin-top:8px">🇰🇷→🗣️ ${esc(ME.n)}님 시험은 <b>한국어 보고 불어로 말하기</b>로만 나와요.</div>`:''}
     <label class="f">범위</label>
     <div class="seg wrap" data-mk="scope"><button data-v="today">오늘 (${nT})</button><button data-v="day">📅 날짜 고르기</button><button data-v="week">최근 7일</button><button data-v="all">전체</button><button data-v="wrong">틀린 것</button></div>
     <div id="mtdaybox" style="margin-top:8px" class="${MT.scope==='day'?'':'hide'}"><select id="mtday">${days.map(([d,n])=>`<option value="${d}" ${d===MT.day?'selected':''}>${dayFull(d)} — ${n}개</option>`).join('')}</select></div>
-    <label class="f">문제 수</label>
+    ${ONLY_SAY?`<label class="f">문제 수</label>
     <div class="seg" data-mk="count"><button data-v="10">10</button><button data-v="20">20</button><button data-v="999">전부</button></div>
-    <div style="margin-top:14px"><button class="btn pri big" id="go">시작하기 (<span id="n"></span>문제)</button></div>
+    <div style="margin-top:14px"><button class="btn pri big" id="go">시작하기 (<span id="n"></span>문제)</button></div>`
+    :`<div style="margin-top:14px"><button class="btn pri big" id="mdelf">🎓 DELF 형식으로 시험 보기 (<span id="nd"></span>개 표현)</button></div>
+    <div class="muted" style="font-size:12px;margin-top:4px">시험지를 만드는 데 1~2분 걸려요. 만든 시험은 아래 🗂️ 내 DELF 시험에 쌓여서 다시 볼 수 있어요. 표현이 30개보다 많으면 틀린 것과 최근 것 위주로 30개를 골라요.</div>
+    <details style="margin-top:12px"><summary class="muted" style="cursor:pointer">🗣️✍️ 말하기 · 받아쓰기로 보기</summary>
+      <div class="opts" style="margin-top:8px">${['say','dict'].map(k=>`<label><input type="checkbox" data-mtype="${k}" ${t[k]?'checked':''}><span><b>${TYPES[k][0]}</b><small>${TYPES[k][1]}</small></span></label>`).join('')}</div>
+      <label class="f">문제 수</label>
+      <div class="seg" data-mk="count"><button data-v="10">10</button><button data-v="20">20</button><button data-v="999">전부</button></div>
+      <div style="margin-top:10px"><button class="btn big" id="go">말하기·받아쓰기 시작 (<span id="n"></span>문제)</button></div>
+    </details>`}
   </div>
   ${ONLY_SAY?'':listenCard()}
   ${ONLY_SAY?'':delfCard()}
   ${statsCard()}`;
   const sync=()=>{document.querySelectorAll('.seg[data-mk]').forEach(s=>s.querySelectorAll('button').forEach(b=>b.classList.toggle('on',String(MT[s.dataset.mk])===b.dataset.v)));
-    $('#mtdaybox').classList.toggle('hide',MT.scope!=='day');$('#n').textContent=Math.min(mtPool().length,MT.count)};
+    $('#mtdaybox').classList.toggle('hide',MT.scope!=='day');$('#n').textContent=Math.min(mtPool().length,MT.count);const nd=$('#nd');if(nd)nd.textContent=Math.min(mtPool().length,30)};
   document.querySelectorAll('.seg[data-mk]').forEach(s=>s.onclick=e=>{const b=e.target.closest('button');if(!b)return;MT[s.dataset.mk]=s.dataset.mk==='count'?+b.dataset.v:b.dataset.v;sync()});
   $('#mtday').onchange=e=>{MT.day=e.target.value;sync()};
   document.querySelectorAll('[data-mtype]').forEach(c=>c.onchange=()=>{t[c.dataset.mtype]=c.checked;save()});
   $('#go').onclick=()=>startTest();
+  const md=$('#mdelf');if(md)md.onclick=()=>{
+    let pool=mtPool().filter(x=>x.fr&&x.ko);
+    if(pool.length<3){toast('이 범위에 표현이 3개 이상 있어야 해요. 범위를 바꿔 보세요',3000);return}
+    if(pool.length>30){const pri=shuffle(pool.filter(x=>S.wrong[x.id])),rest=pool.filter(x=>!S.wrong[x.id]).sort((a,b)=>a.added<b.added?1:-1);pool=[...pri,...rest].slice(0,30)}
+    const lab={today:'오늘',day:dayFull(MT.day),week:'최근 7일',all:'전체',wrong:'틀린 것'}[MT.scope]||'';
+    delfNew('A2',{items:pool,label:`내 표현 · ${lab} ${pool.length}개`});
+  };
   bindListenCard();bindDelf();sync();
 }
 function pool(){return mtPool()}
@@ -2681,7 +2694,7 @@ function delfCard(){
     <div class="muted" style="margin-bottom:10px">실제 DELF 듣기와 같은 구성이에요: <b>연습 4개 · 25점 · 녹음은 두 번</b> · 보기 A/B/C. 공식 기출을 옮긴 것이 아니라 같은 형식으로 새로 만든 문제예요. 만든 시험은 아래에 쌓여서 몇 번이든 다시 볼 수 있어요.</div>
     <div class="row"><button class="btn pri" data-dnew="A1" style="flex:1">🆕 A1 새 시험</button><button class="btn pri" data-dnew="A2" style="flex:1">🆕 A2 새 시험</button></div>
     ${all.length?`<label class="f">🗂️ 내 DELF 시험 (${all.length}회)</label>${all.map(([k,r],i)=>{const tr=r.tries||[],best=tr.length?Math.max(...tr.map(t=>t.score)):0;
-      return `<div class="item"><div class="t"><b>${esc(r.level)} · ${all.length-i}회차</b><div class="muted" style="font-size:13px">${esc(String(r.at).slice(5).replace('-','/'))} 만듦 · ${tr.length?`${tr.length}번 봄 · 최고 ${best}/25 · 최근 ${tr[tr.length-1].score}/25`:'아직 안 봄'}</div></div><button class="btn sm" data-dgo="${k}">▶ 시험 보기</button></div>`}).join('')}`
+      return `<div class="item"><div class="t"><b>${r.label?'📝 '+esc(r.label):esc(r.level)+' 모의고사'} · ${all.length-i}회차</b><div class="muted" style="font-size:13px">${esc(String(r.at).slice(5).replace('-','/'))} 만듦 · ${tr.length?`${tr.length}번 봄 · 최고 ${best}/25 · 최근 ${tr[tr.length-1].score}/25`:'아직 안 봄'}</div></div><button class="btn sm" data-dgo="${k}">▶ 시험 보기</button></div>`}).join('')}`
       :'<div class="muted" style="font-size:13px;margin-top:8px">🗂️ 아직 만든 시험이 없어요. 새 시험을 만들면 여기에 쌓여요.</div>'}
   </div>`;
 }
@@ -2689,19 +2702,19 @@ function bindDelf(){
   document.querySelectorAll('[data-dnew]').forEach(b=>b.onclick=()=>delfNew(b.dataset.dnew));
   document.querySelectorAll('[data-dgo]').forEach(b=>b.onclick=()=>delfStart(b.dataset.dgo));
 }
-async function delfNew(level){
+async function delfNew(level,mine){
   if(!syncOn()){toast('DELF 시험은 ☁️ 동기화를 연결한 기기에서 만들 수 있어요',3500);return}
   const my={loading:true};DX=my;
-  $('#view').innerHTML=`<div class="card" style="text-align:center;padding:30px 16px"><div style="font-size:40px">🎓</div><h2>DELF ${level} 모의고사를 만드는 중…</h2><div class="muted">연습 4개의 녹음 대본과 문제를 만들고 있어요 (1~2분)</div></div>`;
+  $('#view').innerHTML=`<div class="card" style="text-align:center;padding:30px 16px"><div style="font-size:40px">🎓</div><h2>${mine?'내 표현으로 DELF 형식 시험을 만드는 중…':`DELF ${level} 모의고사를 만드는 중…`}</h2><div class="muted">${mine?esc(mine.label)+' · ':''}연습 4개의 녹음 대본과 문제를 만들고 있어요 (1~2분)</div></div>`;
   try{
     const c=new AbortController(),tm=setTimeout(()=>c.abort(),180000);
-    const r=await fetch(DELF_URL,{method:'POST',signal:c.signal,headers:{'Content-Type':'application/json','X-Sync-Token':SYNC.token},body:JSON.stringify({level})});
+    const r=await fetch(DELF_URL,{method:'POST',signal:c.signal,headers:{'Content-Type':'application/json','X-Sync-Token':SYNC.token},body:JSON.stringify(mine?{level,items:mine.items.map(x=>({fr:x.fr,ko:x.ko}))}:{level})});
     clearTimeout(tm);
     const j=await r.json().catch(()=>null);
     if(!r.ok||!j||!Array.isArray(j.exercises)||!j.exercises.length)throw new Error((j&&j.error)||('서버 '+r.status));
     if(DX!==my)return;
     const id='d'+Date.now().toString(36);
-    S.delf[id]={at:today(),ts:Date.now(),level,exam:j,tries:[]};save();
+    S.delf[id]={at:today(),ts:Date.now(),level,exam:j,tries:[],...(mine?{label:mine.label,ids:mine.items.map(x=>x.id)}:{})};save();
     delfStart(id);
   }catch(e){if(DX===my){DX=null;toast('시험을 만들지 못했어요: '+(e.name==='AbortError'?'시간이 너무 걸렸어요':e.message),4000);render()}}
 }
@@ -2727,7 +2740,7 @@ function dxDraw(){
   const pl=DX.plays[key]||0,left=Math.max(0,2-pl),last=DX.i===DX.steps.length-1;
   const firstOfEx=st.di===0;
   $('#view').innerHTML=`<div class="card">
-    <div class="row" style="justify-content:space-between"><span class="qtype">🎓 DELF ${esc(r.level)} · ${esc(ex.title_ko)}</span><span class="muted">${DX.i+1} / ${DX.steps.length}</span></div>
+    <div class="row" style="justify-content:space-between"><span class="qtype">🎓 ${r.label?'내 표현':'DELF '+esc(r.level)} · ${esc(ex.title_ko)}</span><span class="muted">${DX.i+1} / ${DX.steps.length}</span></div>
     <div class="bar"><i style="width:${DX.i/DX.steps.length*100}%"></i></div>
     <div class="dcons">${esc(ex.consigne_fr)}</div><div class="muted" style="font-size:13px">${esc(ex.consigne_ko)}</div>
     <div style="margin-top:10px;font-weight:600">🎧 ${esc(doc.kind||'녹음')}${ex.docs.length>1?` · ${st.di+1}/${ex.docs.length}`:''}</div>
@@ -2755,14 +2768,16 @@ function dxDraw(){
 }
 function dxSubmit(){
   const r=S.delf[DX.id];let got=0,tot=0;const per=[];
-  r.exam.exercises.forEach((ex,ei)=>{let g=0,t=0;(ex.docs||[]).forEach((d,di)=>d.questions.forEach((q,qi)=>{const p=+q.points||1;t+=p;if(DX.ans[ei+'.'+di+'.'+qi]===q.answer)g+=p}));per.push({name:ex.title_ko,g,t});got+=g;tot+=t});
+  const seen={};
+  r.exam.exercises.forEach((ex,ei)=>{let g=0,t=0;(ex.docs||[]).forEach((d,di)=>d.questions.forEach((q,qi)=>{const p=+q.points||1,ok=DX.ans[ei+'.'+di+'.'+qi]===q.answer;t+=p;if(ok)g+=p;
+    const iid=r.ids&&q.target>=0&&r.ids[q.target];if(iid&&!seen[iid]){seen[iid]=1;const it=S.items.find(x=>x.id===iid);if(it){const at=it.att||(it.att=[]);at.push({d:today(),t:'delf',ok});if(at.length>60)at.splice(0,at.length-60)}}}));per.push({name:ex.title_ko,g,t});got+=g;tot+=t});
   const sc=Math.round((tot?got/tot*25:0)*2)/2;
   (r.tries||(r.tries=[])).push({d:today(),at:timeNow(),score:sc});save();
   DX.done=true;DX.result={sc,per};dxDraw();scrollTo(0,0);
 }
 function dxResult(){
   const r=S.delf[DX.id],{sc,per}=DX.result;
-  $('#view').innerHTML=`<div class="card" style="text-align:center"><h2>🎓 DELF ${esc(r.level)} 듣기 결과</h2>
+  $('#view').innerHTML=`<div class="card" style="text-align:center"><h2>🎓 ${r.label?esc(r.label)+' (DELF 형식)':'DELF '+esc(r.level)} 듣기 결과</h2>
     <div style="font-size:44px;font-weight:800;color:var(--accent)">${sc} / 25</div>
     <div class="muted">${sc>=20?'🎉 아주 좋아요! 실전도 자신 있게!':sc>=12.5?'👍 합격권이에요. 틀린 문제의 대본을 다시 들어 봐요.':sc>=5?'💪 영역 최소 점수(5점)는 넘었어요. 대본을 보며 다시 들어 봐요.':'🌱 5점 미만이면 과락이에요. 연습 모드로 대본과 함께 들어 봐요.'}</div>
     <div class="muted" style="font-size:12px;margin-top:4px">DELF 합격: 4개 영역 합계 50/100 이상 · 영역마다 최소 5/25</div>
@@ -2778,7 +2793,7 @@ function dxResult(){
 }
 
 // 📊 내 시험 기록: 최근 14일 · 정답률 · 가장 약한 표현
-const ATT_T={say:'🗣️ 말하기',dict:'✍️ 받아쓰기',listen:'👂 듣기 평가',spell:'✍️ 쓰기',speak:'🗣️ 따라 읽기',both:'🎧 뜻+불어'};
+const ATT_T={delf:'🎓 DELF형',say:'🗣️ 말하기',dict:'✍️ 받아쓰기',listen:'👂 듣기 평가',spell:'✍️ 쓰기',speak:'🗣️ 따라 읽기',both:'🎧 뜻+불어'};
 function statsCard(){
   const days=[...Array(14)].map((_,i)=>daysAgo(13-i)),per={};days.forEach(d=>per[d]={n:0,ok:0});
   let tot=0,ok=0,tested=0;
