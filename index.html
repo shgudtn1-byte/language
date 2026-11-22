@@ -30,7 +30,7 @@ nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px
 nav button{flex:1;max-width:128px;background:none;border:0;padding:8px 2px 12px;color:var(--muted);font:inherit;font-size:12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
 nav button b{font-size:20px;font-weight:400}
 nav button.on{color:var(--accent);font-weight:600}
-nav button span{white-space:nowrap}nav button[data-tab=listen] span{font-size:11px;letter-spacing:-.05em}
+nav button span{white-space:nowrap}nav button[data-tab=listen] span,nav button[data-tab=diary] span{font-size:11px;letter-spacing:-.05em}
 .badge{background:var(--bad);color:#fff;border-radius:10px;padding:0 6px;font-size:11px;margin-left:2px}
 button.btn{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:10px 14px;cursor:pointer}
 button.btn:hover{border-color:var(--accent)}
@@ -509,7 +509,7 @@ document.addEventListener('click',e=>{
 
 // ---------- 내비 ----------
 let tab=location.hash==='#listen'?'listen':'add';
-const TABS=[['add','✏️','저장'],['speak','⭐','필수 표현'],['listen','🎙️','듣고말하기'],['test','📝','테스트'],['wrong','📕','오답노트']];
+const TABS=[['add','✏️','저장'],['diary','📔','불어 일기'],['speak','⭐','필수 표현'],['listen','🎙️','듣고말하기'],['test','📝','테스트'],['wrong','📕','오답노트']];
 function renderNav(){
   const wc=Object.keys(S.wrong).filter(byId).length;
   $('#nav').innerHTML=TABS.map(([k,i,l])=>`<button class="${tab===k?'on':''}" data-tab="${k}"><b>${i}</b><span>${l}${k==='wrong'&&wc?`<span class="badge">${wc}</span>`:''}</span></button>`).join('');
@@ -527,7 +527,7 @@ function render(){
   const d=new Date();$('#sub').textContent=`${d.getMonth()+1}월 ${d.getDate()}일 · ${isMorning()?'좋은 아침이에요 ☀️':'오늘 하루 수고했어요 🌙'}`;
   renderNav();
   $('#adm').textContent=adminOk?'🔓 관리자':'🔒 관리자';
-  ({home:vAdd,add:vAdd,speak:vSpeak,listen:vListen,test:vTest,wrong:vWrong,list:vList,admin:vAdmin})[tab]();
+  ({home:vAdd,add:vAdd,diary:vDiary,speak:vSpeak,listen:vListen,test:vTest,wrong:vWrong,list:vList,admin:vAdmin})[tab]();
   if(typeof setSync==='function'&&syncState)setSync(syncState);
 }
 
@@ -1055,6 +1055,85 @@ function vResult(){
   $('#home').onclick=()=>{T=null;go('test')};
 }
 
+// ---------- 📔 불어 일기 ----------
+// 하루 3~5줄. 불어든 한글이든 쓰고 '선생님 첨삭'을 누르면 Claude가 고쳐 줘요.
+// 내가 쓴 문장은 그대로 두고 틀린 부분만 빨간 취소선으로 보여 줘요. S.diary[날짜].fr / .fix 에 저장 → ☁️ 동기화 → 노션 PDS 다이어리 '하루' 페이지로 옮겨져요.
+const DIARY_URL=TR_URL.replace(/\/translate$/,'/diary');
+let dDate=null,dBusy=false;
+function vDiary(){
+  const d=dDate||today(),di=S.diary[d]||{},fx=di.fix,stale=fx&&fx.src!==(di.fr||'');
+  const past=Object.keys(S.diary).filter(k=>k!==d&&S.diary[k].fr).sort().reverse().slice(0,10);
+  $('#view').innerHTML=`
+  <div class="card"><div class="row" style="justify-content:space-between;flex-wrap:nowrap">
+    <button class="btn sm" id="ydp">◀</button>
+    <div style="text-align:center"><b>${fmtD(d)}</b>${d===today()?' <span class="tag">오늘</span>':''}<br>
+      <input type="date" id="ydd" value="${d}" style="font:inherit;font-size:13px;border:0;background:none;color:var(--muted)"></div>
+    <button class="btn sm" id="ydn">▶</button></div></div>
+  <div class="card"><h2>📔 불어 일기</h2>
+    <div class="muted" style="margin-bottom:6px">오늘 있었던 일을 3~5줄로 써 보세요. 모르는 문장은 한글로 써도 돼요.</div>
+    <textarea id="yfr" data-fr style="min-height:150px;line-height:1.6" placeholder="Aujourd'hui, je suis allé à l'église.&#10;J'ai mangé du riz avec ma famille.&#10;오늘 아이들과 감사고백을 했다.">${esc(di.fr||'')}</textarea>${accBar()}
+    <div class="row" style="margin-top:10px;justify-content:space-between"><span class="muted" id="ysv">${di.updated?'저장됨 · '+esc(di.updated):''}</span>
+      <button class="btn pri" id="yfix">${fx&&!stale?'✏️ 다시 첨삭받기':'✏️ 선생님 첨삭'}</button></div>
+    <div id="yout">${fx?diaryFixHtml(fx,stale):''}</div>
+  </div>
+  ${past.length?`<div class="card"><h2>지난 불어 일기</h2>${past.map(k=>`<div class="item" data-yd="${k}" style="cursor:pointer;align-items:flex-start"><div class="t"><b>${fmtD(k)}</b>${S.diary[k].fix?' <span class="tag">첨삭됨</span>':''}<div class="muted" style="white-space:pre-line">${esc(S.diary[k].fr.split('\n').slice(0,2).join('\n'))}</div></div></div>`).join('')}</div>`:''}`;
+  const open=k=>{dDate=k;vDiary();scrollTo(0,0)};
+  $('#ydp').onclick=()=>open(shiftD(d,-1));$('#ydn').onclick=()=>open(shiftD(d,1));
+  $('#ydd').onchange=e=>{if(e.target.value)open(e.target.value)};
+  document.querySelectorAll('[data-yd]').forEach(x=>x.onclick=()=>open(x.dataset.yd));
+  const ta=$('#yfr');let tmr;
+  const keep=()=>{const v=ta.value,o=S.diary[d]||{};if((o.fr||'')===v)return;
+    if(!v.trim()&&!o.text&&!o.mood){delete S.diary[d];save();return}
+    S.diary[d]={...o,fr:v,updated:new Date().toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})};save();
+    const sv=$('#ysv');if(sv)sv.textContent='저장됨 · '+S.diary[d].updated};
+  ta.oninput=()=>{clearTimeout(tmr);tmr=setTimeout(keep,600)};
+  $('#yfix').onclick=()=>{clearTimeout(tmr);keep();diaryFix(d)};
+  bindDiaryOut();
+}
+function diaryFixHtml(fx,stale){
+  const seg=(a,k)=>(a||[]).map(s=>s[k]?(k==='wrong'?`<s style="color:var(--bad);text-decoration-thickness:2px">${esc(s.text)}</s>`:`<b style="color:var(--good)">${esc(s.text)}</b>`):esc(s.text)).join('');
+  return (stale?`<div class="note" style="margin-top:10px">✍️ 첨삭 뒤에 일기를 고쳤어요. 다시 첨삭받으려면 위 버튼을 누르세요.</div>`:'')
+  +`<div style="margin-top:12px">`+fx.lines.map((l,i)=>`<div style="border-top:1px solid var(--line);padding:12px 0">
+    <div class="muted" style="font-size:12px">${i+1}번째 줄 · ${l.kind==='fr_ok'?'✅ 맞아요':l.kind==='ko'?'🇰🇷 → 🇫🇷':'✏️ 고칠 곳 있음'}</div>
+    <div style="margin-top:4px">1️⃣ <span class="muted">내가 쓴 문장</span><br><span style="font-size:16px">${seg(l.original,'wrong')}</span></div>
+    ${l.kind==='fr_ok'?'':`<div style="margin-top:6px">✏️ <span class="muted">고친 문장</span><br><span class="fr" style="font-size:17px">${l.corrected&&l.corrected.map(s=>s.text).join('')===l.corrected_text?seg(l.corrected,'changed'):esc(l.corrected_text)}</span></div>`}
+    <div class="row" style="gap:6px;margin-top:4px"><button class="btn sm" data-say="${esc(l.corrected_text)}">🔊 듣기</button><button class="btn sm" data-say="${esc(l.corrected_text)}" data-slow="1">🐢 천천히</button></div>
+    <div class="pron">🔊 ${esc(l.pron)}</div><div class="muted">${esc(l.meaning)}</div>
+    <div class="note">🔍 <b>왜 고쳤나요</b> ${esc(l.why)}</div>
+    <div class="note">📘 <b>문법</b> ${esc(l.grammar)}</div>
+    ${(l.local||[]).length?`<div class="note">🗣️ <b>현지에서는 이렇게도</b>${l.local.map(x=>`<div class="row" style="gap:6px;margin-top:3px;flex-wrap:nowrap"><div style="flex:1"><span class="fr">${esc(x.fr)}</span> — ${esc(x.ko)}</div><button class="ib" data-say="${esc(x.fr)}" title="듣기">🔊</button><button class="ib" data-ysave="${esc(x.fr)}" data-yko="${esc(x.ko)}" title="표현 저장">⭐</button></div>`).join('')}</div>`:''}
+  </div>`).join('')
+  +`<div class="fb ok"><h3>💡 오늘 꼭 기억할 것</h3>${esc(fx.remember)}</div>
+   <div class="fb" style="background:var(--soft)"><h3>⭐ 오늘의 표현</h3><span class="fr">${esc(fx.expression.fr)}</span> — ${esc(fx.expression.ko)}<div class="pron">${esc(fx.expression.pron)}</div>
+     <div class="row" style="gap:6px;margin-top:6px"><button class="btn sm" data-say="${esc(fx.expression.fr)}">🔊 듣기</button><button class="btn sm pri" data-ysave="${esc(fx.expression.fr)}" data-yko="${esc(fx.expression.ko)}" data-ypron="${esc(fx.expression.pron)}">⭐ 내 표현에 저장</button></div></div></div>`;
+}
+function bindDiaryOut(){
+  document.querySelectorAll('[data-ysave]').forEach(b=>b.onclick=()=>{
+    const f=b.dataset.ysave.trim(),k=b.dataset.yko.trim();
+    if(S.items.some(x=>x.fr.trim().toLowerCase()===f.toLowerCase())){toast('이미 저장된 표현이에요');return}
+    const it={id:uid(),fr:f,ko:k,kind:kindOf(f),added:today(),right:0,wrong:0};if(b.dataset.ypron)it.pron=b.dataset.ypron;
+    S.items.push(it);save();renderNav();toast('내 표현에 저장했어요 ⭐');b.textContent='✓ 저장됨';b.disabled=true;
+  });
+}
+async function diaryFix(d){
+  if(dBusy)return;const text=(S.diary[d]?.fr||'').trim();
+  if(!text){toast('일기를 먼저 써 보세요');return}
+  if(!syncOn()){toast('☁️ 동기화를 연결하면 선생님 첨삭을 받을 수 있어요',2600);return}
+  const B=$('#yfix'),O=$('#yout');dBusy=true;B.disabled=true;B.textContent='✏️ 선생님이 읽는 중… (10~20초)';
+  let fx=null,why='';
+  try{
+    const c=new AbortController(),t=setTimeout(()=>c.abort(),60000);
+    const r=await fetch(DIARY_URL,{method:'POST',signal:c.signal,headers:{'Content-Type':'application/json','X-Sync-Token':SYNC.token},body:JSON.stringify({text})});clearTimeout(t);
+    if(r.ok)fx=await r.json();else why=r.status===401?'동기화 토큰을 확인하지 못했어요.':((await r.json().catch(()=>({}))).error||'첨삭 서버가 지금 응답하지 않아요.');
+  }catch(_){why='첨삭 서버에 연결하지 못했어요.'}
+  dBusy=false;
+  if(!fx||!fx.lines){if(B){B.disabled=false;B.textContent='✏️ 선생님 첨삭'}toast(why||'첨삭하지 못했어요',2600);return}
+  fx.src=text;fx.at=new Date().toISOString();
+  S.diary[d]={...(S.diary[d]||{}),fix:fx};save();
+  if(tab==='diary'&&(dDate||today())===d){vDiary();$('#yout')?.scrollIntoView({behavior:'smooth',block:'start'})}
+  toast('첨삭이 끝났어요 ✓');
+}
+
 // ---------- 오답노트 ----------
 function vWrong(){
   const ws=S.items.filter(x=>S.wrong[x.id]).sort((a,b)=>S.wrong[b.id].count-S.wrong[a.id].count);
@@ -1427,8 +1506,8 @@ function aDay(){
     <div class="row" style="gap:4px">${MOODS.map(m=>`<button class="ib" data-m="${m}" style="font-size:26px;border-radius:10px;${di.mood===m?'background:var(--soft);outline:2px solid var(--accent)':''}">${m}</button>`).join('')}</div>
     <label class="f">있었던 일, 느낀 점</label>
     <textarea id="dtx" style="min-height:150px" placeholder="오늘 마키에서 'Combien ça coûte ?'를 처음 써봤다. 아주머니가 웃으면서…">${esc(di.text)}</textarea>
-    <label class="f">불어로 한 줄 일기 (선택)</label>
-    <div class="row"><input type="text" id="dfr" data-fr value="${esc(di.fr)}" placeholder="Aujourd'hui, j'ai appris…" style="flex:1"><button class="ib" id="dsay" title="듣기">🔊</button></div>${accBar()}
+    <label class="f">불어 일기 (📔 불어 일기 탭에서 첨삭받기)</label>
+    <div class="row" style="align-items:flex-start"><textarea id="dfr" data-fr placeholder="Aujourd'hui, j'ai appris…" style="flex:1;min-height:90px">${esc(di.fr)}</textarea><button class="ib" id="dsay" title="듣기">🔊</button></div>${accBar()}
     <div class="row" style="margin-top:10px;justify-content:space-between"><span class="muted" id="dsv">${di.updated?'저장됨 · '+esc(di.updated):''}</span><button class="btn pri" id="dsave">일기 저장</button></div>
   </div>
 
@@ -1470,7 +1549,7 @@ function aDay(){
     if(!text.trim()&&!fr.trim()&&!mood){delete S.diary[d];save();return}
     const changed=(S.diary[d]?.text||'')!==text||(S.diary[d]?.fr||'')!==fr||(S.diary[d]?.mood||'')!==mood;
     if(!changed)return;
-    S.diary[d]={mood,text,fr,updated:new Date().toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})};
+    S.diary[d]={...(S.diary[d]||{}),mood,text,fr,updated:new Date().toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})};
     save();const sv=$('#dsv');if(sv)sv.textContent='저장됨 · '+S.diary[d].updated;
     if(!silent)toast('일기를 저장했어요 ✓');
   }
