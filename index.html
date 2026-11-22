@@ -219,7 +219,7 @@ function seed(){
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&Array.isArray(d.items))return d}catch(e){}return seed()}
 function save(){if(typeof onSaved==='function')onSaved();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 let S=load();
-function fix(){S.settings=S.settings||{};if(S.settings.voiceV!==2){S.settings.voiceV=2;S.settings.voice='';if(S.settings.rate===0.9)S.settings.rate=0.95}S.items.forEach(x=>{if(!x.pack&&!/^p[swgcbvh]\d{3}$/.test(x.id))x.kind=kindOf(x.fr)});S.todos=S.todos||{};S.diary=S.diary||{};S.history=S.history||[];S.settings=S.settings||{};S.wrong=S.wrong||{};S.log=S.log||{};S.stamp=S.stamp||{};S.speak=S.speak||{};S.quiz=S.quiz||{};S.delf=S.delf||{};
+function fix(){S.settings=S.settings||{};if(S.settings.voiceV!==2){S.settings.voiceV=2;S.settings.voice='';if(S.settings.rate===0.9)S.settings.rate=0.95}S.items.forEach(x=>{if(!x.pack&&!/^p[swgcbvh]\d{3}$/.test(x.id))x.kind=kindOf(x.fr)});S.todos=S.todos||{};S.diary=S.diary||{};S.history=S.history||[];S.settings=S.settings||{};S.wrong=S.wrong||{};S.log=S.log||{};S.stamp=S.stamp||{};S.speak=S.speak||{};S.quiz=S.quiz||{};S.delf=S.delf||{};S.mini=S.mini||{};
   S.settings.wtypes=Object.assign({say:true,speak:true,spell:false,dict:false},S.settings.wtypes||{});S.settings.sp=Object.assign({goalMin:60,goalReps:300,reps:5,pause:'mid',mode:(window.SpeechRecognition||window.webkitSpeechRecognition)?'mic':'auto',show:'text',scope:'least',slowFirst:true,pk:'s',cat:'👋 인사'},S.settings.sp||{})}
 fix();
 
@@ -520,6 +520,7 @@ function go(t){
   if(tab==='listen'&&t!=='listen')lnStop();
   if(t!=='test'&&typeof L!=='undefined'&&L){L=null;ttsStop()}
   if(t!=='test'&&typeof DX!=='undefined'&&DX){DX=null;ttsStop()}
+  if(t!=='test'&&typeof MX!=='undefined'&&MX){MX=null;ttsStop()}
   if(t!=='admin'&&location.hash==='#admin'){try{history.replaceState(null,'',location.pathname+location.search)}catch(_){}}
   tab=t;render();scrollTo(0,0);
 }
@@ -841,6 +842,7 @@ function mtPool(){
   return a;
 }
 function vTest(){
+  if(MX)return mxDraw();
   if(DX)return dxDraw();
   if(T)return vQuestion();
   if(L)return lDraw();
@@ -849,7 +851,7 @@ function vTest(){
   const nT=S.items.filter(x=>x.added===today()).length;
   $('#view').innerHTML=`
   <div class="card"><h2>📝 내가 저장한 표현 시험</h2>
-    <div class="muted">${ONLY_SAY?'기본은 <b>오늘 저장한 표현 전부</b>예요.':`기본은 <b>지금까지 배운 표현 전체를 종합한 시험</b>이에요 (${S.items.length}개). 표현이 <b>DELF 듣기 형식</b>(안내 방송·음성 메시지·대화, 두 번 듣기, A/B/C, 25점) 시험 속에 들어가요. 범위를 바꿔 오늘 것·특정 날짜만 볼 수도 있어요.`}</div>
+    <div class="muted">${ONLY_SAY?'기본은 <b>오늘 저장한 표현 전부</b>예요.':`기본은 <b>지금까지 배운 표현 전체를 종합한 시험</b>이에요 (${S.items.length}개). 내 표현이 들어간 <b>5~7줄 짧은 대화</b>를 듣고, 쉬운 문제 2~3개를 풀면 <b>바로 정답</b>이 나와요. 범위를 바꿔 오늘 것·특정 날짜만 볼 수도 있어요.`}</div>
     ${ONLY_SAY?`<div class="muted" style="margin-top:8px">🇰🇷→🗣️ ${esc(ME.n)}님 시험은 <b>한국어 보고 불어로 말하기</b>로만 나와요.</div>`:''}
     <label class="f">범위</label>
     <div class="seg wrap" data-mk="scope">${ONLY_SAY?'':`<button data-v="all">📚 전체 종합 (${S.items.length})</button>`}<button data-v="today">오늘 (${nT})</button><button data-v="day">📅 날짜 고르기</button><button data-v="week">최근 7일</button>${ONLY_SAY?'<button data-v="all">전체</button>':''}<button data-v="wrong">틀린 것</button></div>
@@ -857,8 +859,11 @@ function vTest(){
     ${ONLY_SAY?`<label class="f">문제 수</label>
     <div class="seg" data-mk="count"><button data-v="10">10</button><button data-v="20">20</button><button data-v="999">전부</button></div>
     <div style="margin-top:14px"><button class="btn pri big" id="go">시작하기 (<span id="n"></span>문제)</button></div>`
-    :`<div style="margin-top:14px"><button class="btn pri big" id="mdelf">🎓 DELF 형식으로 시험 보기 (<span id="nd"></span>개 표현)</button></div>
-    <div class="muted" style="font-size:12px;margin-top:4px">시험지를 만드는 데 1~2분 걸려요. 만든 시험은 아래 🗂️ 내 DELF 시험에 쌓여서 다시 볼 수 있어요. 한 시험에 30개까지 들어가요. 더 많으면 틀린 것 → 아직 안 본 것 → 오래전에 본 것 순서로 골라서, 시험을 볼 때마다 모든 표현이 골고루 돌아가요.</div>
+    :`<label class="f">세트 수</label>
+    <div class="seg" data-mn><button data-v="3">3세트</button><button data-v="5">5세트</button></div>
+    <div style="margin-top:12px"><button class="btn pri big" id="mmini">🎧 짧은 듣기 시험 시작</button></div>
+    <div class="muted" style="font-size:12px;margin-top:4px">처음 만들 때 20~40초 걸려요. 만든 세트는 문제 은행에 쌓여서 아래 🔁 버튼으로 바로 다시 풀 수 있어요. 시험마다 다른 표현이 골고루 나와요.</div>
+    ${(()=>{const s=mxStat();return s.n?`<div class="row" style="margin-top:10px"><button class="btn" id="mrev" style="flex:1">🔁 저장된 세트 다시 (${s.n})</button><button class="btn" id="mrevw" style="flex:1" ${s.wrong?'':'disabled'}>❌ 틀린 세트만 (${s.wrong})</button></div>`:''})()}
     <details style="margin-top:12px"><summary class="muted" style="cursor:pointer">🗣️✍️ 말하기 · 받아쓰기로 보기</summary>
       <div class="opts" style="margin-top:8px">${['say','dict'].map(k=>`<label><input type="checkbox" data-mtype="${k}" ${t[k]?'checked':''}><span><b>${TYPES[k][0]}</b><small>${TYPES[k][1]}</small></span></label>`).join('')}</div>
       <label class="f">문제 수</label>
@@ -870,24 +875,15 @@ function vTest(){
   ${ONLY_SAY?'':delfCard()}
   ${statsCard()}`;
   const sync=()=>{document.querySelectorAll('.seg[data-mk]').forEach(s=>s.querySelectorAll('button').forEach(b=>b.classList.toggle('on',String(MT[s.dataset.mk])===b.dataset.v)));
-    $('#mtdaybox').classList.toggle('hide',MT.scope!=='day');$('#n').textContent=Math.min(mtPool().length,MT.count);const nd=$('#nd');if(nd)nd.textContent=Math.min(mtPool().length,30)};
+    $('#mtdaybox').classList.toggle('hide',MT.scope!=='day');$('#n').textContent=Math.min(mtPool().length,MT.count);document.querySelectorAll('[data-mn] button').forEach(b=>b.classList.toggle('on',+b.dataset.v===MXN))};
   document.querySelectorAll('.seg[data-mk]').forEach(s=>s.onclick=e=>{const b=e.target.closest('button');if(!b)return;MT[s.dataset.mk]=s.dataset.mk==='count'?+b.dataset.v:b.dataset.v;sync()});
   $('#mtday').onchange=e=>{MT.day=e.target.value;sync()};
   document.querySelectorAll('[data-mtype]').forEach(c=>c.onchange=()=>{t[c.dataset.mtype]=c.checked;save()});
   $('#go').onclick=()=>startTest();
-  const md=$('#mdelf');if(md)md.onclick=()=>{
-    let pool=mtPool().filter(x=>x.fr&&x.ko);
-    if(pool.length<3){toast('이 범위에 표현이 3개 이상 있어야 해요. 범위를 바꿔 보세요',3000);return}
-    // 30개가 넘으면 시험마다 골고루 돌아가요: 오답노트 → 아직 시험 안 본 것 → 오래전에 시험 본 것 (같으면 무작위)
-    if(pool.length>30){
-      const lastT=x=>{const a=x.att||[];return a.length?a[a.length-1].d:''};
-      const wr=shuffle(pool.filter(x=>S.wrong[x.id])).slice(0,10);
-      const rest=shuffle(pool.filter(x=>!wr.includes(x))).sort((a,b)=>lastT(a)<lastT(b)?-1:lastT(a)>lastT(b)?1:0);
-      pool=[...wr,...rest].slice(0,30);
-    }
-    const lab={today:'오늘',day:dayFull(MT.day),week:'최근 7일',all:'전체 종합',wrong:'틀린 것'}[MT.scope]||'';
-    delfNew('A2',{items:pool,label:`내 표현 · ${lab} ${pool.length}개`});
-  };
+  document.querySelectorAll('[data-mn] button').forEach(b=>b.onclick=()=>{MXN=+b.dataset.v;sync()});
+  const mm=$('#mmini');if(mm)mm.onclick=()=>mxNew();
+  const mr=$('#mrev');if(mr)mr.onclick=()=>mxReview(false);
+  const mw=$('#mrevw');if(mw)mw.onclick=()=>mxReview(true);
   bindListenCard();bindDelf();sync();
 }
 function pool(){return mtPool()}
@@ -2768,6 +2764,95 @@ function listenCard(){
     <div class="muted" style="font-size:12px;margin-top:4px">복습은 틀린 문제 → 안 푼 문제 → 오래전에 푼 문제 순서로 나와요. 보기 순서는 매번 바뀌어요.</div>`})()}
   </div>`;
 }
+// ---------- 🎧 내 표현 짧은 듣기: 5~7줄 대화 + 쉬운 문제 2~3개, 고르면 바로 정답 ----------
+const MINI_URL=TR_URL.replace(/\/translate$/,'/mini');
+var MX=null,MXN=5;
+function mxStat(){const ks=Object.keys(S.mini||{});let wrong=0;ks.forEach(k=>{const t=S.mini[k].tries||[];if(t.length&&!t[t.length-1].ok)wrong++});return {n:ks.length,wrong}}
+// 표현 고르기: 오답노트 → 시험 안 본 것 → 오래전에 본 것 (시험마다 골고루 돌아가요)
+function mxItems(k){
+  let pool=mtPool().filter(x=>x.fr&&x.ko);
+  const lastT=x=>{const a=x.att||[];return a.length?a[a.length-1].d:''};
+  const wr=shuffle(pool.filter(x=>S.wrong[x.id])).slice(0,Math.ceil(k/3));
+  const rest=shuffle(pool.filter(x=>!wr.includes(x))).sort((a,b)=>lastT(a)<lastT(b)?-1:lastT(a)>lastT(b)?1:0);
+  return [...wr,...rest].slice(0,k);
+}
+async function mxNew(){
+  if(!syncOn()){toast('짧은 듣기는 ☁️ 동기화를 연결한 기기에서 만들 수 있어요',3500);return}
+  const items=mxItems(MXN*3);
+  if(items.length<2){toast('이 범위에 표현이 2개 이상 있어야 해요. 범위를 바꿔 보세요',3000);return}
+  const my={loading:true};MX=my;
+  $('#view').innerHTML=`<div class="card" style="text-align:center;padding:30px 16px"><div style="font-size:40px">🎧</div><h2>내 표현으로 짧은 듣기를 만드는 중…</h2><div class="muted">${MXN}세트 · 20~40초</div></div>`;
+  try{
+    const c=new AbortController(),tm=setTimeout(()=>c.abort(),120000);
+    const r=await fetch(MINI_URL,{method:'POST',signal:c.signal,headers:{'Content-Type':'application/json','X-Sync-Token':SYNC.token},body:JSON.stringify({items:items.map(x=>({fr:x.fr,ko:x.ko})),n:MXN})});
+    clearTimeout(tm);
+    const j=await r.json().catch(()=>null);
+    const sets=(j&&j.sets||[]).filter(s=>s.lines&&s.lines.length&&s.questions&&s.questions.length);
+    if(!r.ok||!sets.length)throw new Error((j&&j.error)||('서버 '+r.status));
+    if(MX!==my)return;
+    const base=Date.now().toString(36),keys=[];
+    sets.forEach((s,i)=>{const k=base+i;keys.push(k);
+      S.mini[k]={at:today(),scene:s.scene,lines:s.lines,questions:s.questions.map(q=>({...q,id:q.target>=0&&items[q.target]?items[q.target].id:''})),tries:[]}});
+    save();mxStart(keys);
+  }catch(e){if(MX===my){MX=null;toast('듣기를 만들지 못했어요: '+(e.name==='AbortError'?'시간이 너무 걸렸어요':e.message),4000);render()}}
+}
+function mxReview(onlyWrong){
+  const ks=Object.keys(S.mini||{}).filter(k=>{const t=S.mini[k].tries||[];return !onlyWrong||(t.length&&!t[t.length-1].ok)});
+  if(!ks.length){toast(onlyWrong?'틀린 세트가 없어요 🎉':'저장된 세트가 없어요');return}
+  const sc=k=>{const t=S.mini[k].tries||[],l=t[t.length-1];return l&&!l.ok?0:!t.length?1:2};
+  mxStart(shuffle(ks).sort((a,b)=>sc(a)-sc(b)||String((S.mini[a].tries||[]).slice(-1)[0]?.d||'').localeCompare(String((S.mini[b].tries||[]).slice(-1)[0]?.d||''))).slice(0,MXN),true);
+}
+function mxStart(keys,review){MX={keys,i:0,ans:{},review,score:0,total:0,run:0};tab='test';render();scrollTo(0,0);setTimeout(()=>mxPlay(false),300)}
+async function mxPlay(slow){
+  if(!MX||MX.loading)return;const s=S.mini[MX.keys[MX.i]];
+  if(MX.playing){MX.run++;ttsStop();MX.playing=false;mxDrawPlay();return}
+  const run=++MX.run;MX.playing=true;mxDrawPlay();
+  for(const l of s.lines){if(!MX||MX.run!==run)return;await speakP(l.fr,slow,l.who==='나'?0:1);await sleep(350)}
+  if(MX&&MX.run===run){MX.playing=false;mxDrawPlay()}
+}
+function mxDrawPlay(){const b=$('#mxplay');if(b)b.textContent=MX.playing?'⏹ 멈추기':'▶ 대화 듣기'}
+function mxDraw(){
+  if(!MX||MX.loading)return;
+  if(MX.i>=MX.keys.length)return mxEnd();
+  const k=MX.keys[MX.i],s=S.mini[k],qs=s.questions,done=qs.every((q,qi)=>MX.ans[k+'.'+qi]!==undefined);
+  $('#view').innerHTML=`<div class="card">
+    <div class="row" style="justify-content:space-between"><span class="qtype">${MX.review?'🔁 ':''}🎧 짧은 듣기</span><span class="muted">${MX.i+1} / ${MX.keys.length}</span></div>
+    <div class="bar"><i style="width:${MX.i/MX.keys.length*100}%"></i></div>
+    <div class="muted" style="margin-top:6px">🎭 ${esc(s.scene||'')}</div>
+    <div class="play"><button class="btn" id="mxplay">${MX.playing?'⏹ 멈추기':'▶ 대화 듣기'}</button><button class="btn" id="mxslow">🐢 천천히</button></div>
+    ${qs.map((q,qi)=>{const a=MX.ans[k+'.'+qi],ans=a!==undefined;return `<div class="dq"><b>${qi+1}. ${esc(q.q_ko)}</b>
+      <div class="lopts">${q.options_ko.map((o,oi)=>`<button class="lopt ${ans?(oi===q.answer?'good':oi===a?'bad':''):''}" data-mq="${qi}" data-mo="${oi}" ${ans?'disabled':''}><b>${'①②③'[oi]}</b> ${esc(o)}</button>`).join('')}</div>
+      ${ans?`<div style="font-size:14px;margin-top:6px">${a===q.answer?'⭕ 정답!':'❌ 아쉬워요'} · 💡 ${esc(q.explain_ko)}</div>`:''}</div>`}).join('')}
+    ${done?`<div class="script" style="margin-top:12px"><div class="muted" style="margin-bottom:4px">📜 대화 전문</div>${s.lines.map(l=>`<div class="sl"><button class="ib" data-say="${esc(l.fr)}">🔊</button><div><div class="fr"><b>${esc(l.who)}:</b> ${esc(l.fr)}</div><div class="muted">${esc(l.ko)}</div></div></div>`).join('')}</div>
+      <button class="btn pri big" id="mxnext" style="margin-top:12px">${MX.i+1<MX.keys.length?'다음 세트 →':'결과 보기'}</button>`
+      :'<div class="muted" style="margin-top:10px;font-size:13px">💡 몇 번이든 다시 들어도 돼요. 고르면 바로 정답이 나와요.</div>'}
+    <button class="btn sm" id="mxquit" style="margin-top:10px">그만하기</button>
+  </div>`;
+  $('#mxplay').onclick=()=>mxPlay(false);$('#mxslow').onclick=()=>{if(MX.playing){MX.run++;ttsStop();MX.playing=false}mxPlay(true)};
+  document.querySelectorAll('[data-mq]').forEach(b=>b.onclick=()=>{
+    const qi=+b.dataset.mq,oi=+b.dataset.mo,q=qs[qi],ok=oi===q.answer;
+    MX.ans[k+'.'+qi]=oi;MX.total++;if(ok)MX.score++;
+    const it=q.id&&S.items.find(x=>x.id===q.id);if(it){const at=it.att||(it.att=[]);at.push({d:today(),t:'mini',ok});if(at.length>60)at.splice(0,at.length-60)}
+    if(qs.every((_,j)=>MX.ans[k+'.'+j]!==undefined)){const allOk=qs.every((q2,j)=>MX.ans[k+'.'+j]===q2.answer);const tr=s.tries||(s.tries=[]);tr.push({d:today(),ok:allOk});if(tr.length>30)tr.splice(0,tr.length-30)}
+    save();const y=scrollY;mxDraw();scrollTo(0,y);
+  });
+  const nx=$('#mxnext');if(nx)nx.onclick=()=>{MX.run++;ttsStop();MX.playing=false;MX.i++;mxDraw();scrollTo(0,0);if(MX&&MX.i<MX.keys.length)setTimeout(()=>mxPlay(false),250)};
+  $('#mxquit').onclick=()=>{MX.run++;ttsStop();MX=null;render()};
+}
+function mxEnd(){
+  const {score,total,review}=MX;
+  S.history.push({d:today(),at:timeNow(),s:'mini',score,total,wrong:[]});save();
+  MX=null;
+  $('#view').innerHTML=`<div class="card" style="text-align:center"><h2>🎧 짧은 듣기 결과</h2>
+    <div style="font-size:44px;font-weight:800;color:var(--accent)">${score} / ${total}</div>
+    <div class="muted">${total&&score===total?'🎉 완벽해요! Bravo !':score/total>=.7?'👍 잘했어요!':'💪 괜찮아요. 틀린 세트만 다시 들어 봐요.'}</div>
+    <div class="muted" style="font-size:13px;margin-top:6px">🗂️ 저장된 세트 ${mxStat().n}개</div>
+    <button class="btn pri big" id="mxagain" style="margin-top:14px">${review?'🔁 한 번 더 복습':'🆕 새 세트로 한 번 더'}</button>
+    <button class="btn" id="mxback" style="margin-top:8px;width:100%">테스트 화면으로</button></div>`;
+  $('#mxagain').onclick=()=>review?mxReview(false):mxNew();
+  $('#mxback').onclick=()=>{render();scrollTo(0,0)};
+}
+
 // ---------- 🎓 DELF 모의 듣기 (A1·A2와 같은 구성 · 매번 새 문제 · 쌓아서 다시 보기) ----------
 // 공식 기출문제를 옮기지 않고, 같은 형식(연습 4개 · 25점 · 두 번 듣기 · 보기 A/B/C)으로 새로 만들어요.
 const DELF_URL=TR_URL.replace(/\/translate$/,'/delf');
@@ -2878,7 +2963,7 @@ function dxResult(){
 }
 
 // 📊 내 시험 기록: 최근 14일 · 정답률 · 가장 약한 표현
-const ATT_T={delf:'🎓 DELF형',say:'🗣️ 말하기',dict:'✍️ 받아쓰기',listen:'👂 듣기 평가',spell:'✍️ 쓰기',speak:'🗣️ 따라 읽기',both:'🎧 뜻+불어'};
+const ATT_T={mini:'🎧 짧은 듣기',delf:'🎓 DELF형',say:'🗣️ 말하기',dict:'✍️ 받아쓰기',listen:'👂 듣기 평가',spell:'✍️ 쓰기',speak:'🗣️ 따라 읽기',both:'🎧 뜻+불어'};
 function statsCard(){
   const days=[...Array(14)].map((_,i)=>daysAgo(13-i)),per={};days.forEach(d=>per[d]={n:0,ok:0});
   let tot=0,ok=0,tested=0;
@@ -2933,6 +3018,7 @@ function parts(s){
   for(const d in s.speak||{})p['speak:'+d]=JSON.stringify(s.speak[d]);
   for(const k in s.quiz||{})p['quiz:'+k]=JSON.stringify(s.quiz[k]);
   for(const k in s.delf||{})p['delf:'+k]=JSON.stringify(s.delf[k]);
+  for(const k in s.mini||{})p['mini:'+k]=JSON.stringify(s.mini[k]);
   p.wrong=JSON.stringify(s.wrong||{});p.settings=JSON.stringify(s.settings||{});
   return p;
 }
@@ -2950,12 +3036,12 @@ function onSaved(){
   syncTimer=setTimeout(()=>{syncTimer=null;syncNow()},drilling?60000:4000);
 }
 function rebuild(p,base){
-  const s={...base,items:[],todos:{},diary:{},log:{},speak:{},wrong:{},settings:{},quiz:{},delf:{}};
+  const s={...base,items:[],todos:{},diary:{},log:{},speak:{},wrong:{},settings:{},quiz:{},delf:{},mini:{}};
   for(const k in p){
     const v=JSON.parse(p[k]);
     if(k==='wrong'){s.wrong=v;continue}if(k==='settings'){s.settings=v;continue}
     const i=k.indexOf(':'),t=k.slice(0,i),id=k.slice(i+1);
-    if(t==='item')s.items.push(v);else if(t==='todos')s.todos[id]=v;else if(t==='diary')s.diary[id]=v;else if(t==='log')s.log[id]=v;else if(t==='speak')s.speak[id]=v;else if(t==='quiz')s.quiz[id]=v;else if(t==='delf')s.delf[id]=v;
+    if(t==='item')s.items.push(v);else if(t==='todos')s.todos[id]=v;else if(t==='diary')s.diary[id]=v;else if(t==='log')s.log[id]=v;else if(t==='speak')s.speak[id]=v;else if(t==='quiz')s.quiz[id]=v;else if(t==='delf')s.delf[id]=v;else if(t==='mini')s.mini[id]=v;
   }
   s.items.sort((a,b)=>a.added<b.added?-1:a.added>b.added?1:0);
   return s;
