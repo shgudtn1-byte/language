@@ -1092,6 +1092,7 @@ function diaryFixHtml(fx,stale){
   +`<div style="margin-top:12px">`+fx.lines.map((l,i)=>`<div style="border-top:1px solid var(--line);padding:12px 0">
     <div class="muted" style="font-size:12px">${i+1}번째 줄 · ${l.kind==='fr_ok'?'✅ 맞아요':l.kind==='ko'?'🇰🇷 → 🇫🇷':'✏️ 고칠 곳 있음'}</div>
     <div style="margin-top:4px">1️⃣ <span class="muted">내가 쓴 문장</span><br><span style="font-size:16px">${seg(l.original,'wrong')}</span></div>
+    ${l.kind==='fr_ok'?`<div class="row" style="gap:6px;margin-top:4px"><button class="btn sm" data-say="${esc((l.original||[]).map(x=>x.text).join(''))}">🔊 듣기</button><button class="btn sm" data-say="${esc((l.original||[]).map(x=>x.text).join(''))}" data-slow="1">🐢 천천히</button></div>`:''}
     ${l.kind==='fr_ok'?'':`<div style="margin-top:6px">✏️ <span class="muted">고친 문장</span><br><span class="fr" style="font-size:17px">${l.corrected&&l.corrected.map(s=>s.text).join('')===l.corrected_text?seg(l.corrected,'changed'):esc(l.corrected_text)}</span></div>`}
     <div class="row" style="gap:6px;margin-top:4px"><button class="btn sm" data-say="${esc(l.corrected_text)}">🔊 듣기</button><button class="btn sm" data-say="${esc(l.corrected_text)}" data-slow="1">🐢 천천히</button></div>
     <div class="pron">🔊 ${esc(l.pron)}</div><div class="muted">${esc(l.meaning)}</div>
