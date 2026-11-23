@@ -586,10 +586,20 @@ function savedStats(){
   S.items.forEach(x=>{const a=x.added||'';if(a===t)o.t++;if(a>=w)o.w++;else if(a>=pw)o.pw++;if(a>=m)o.m++;else if(a>=pm)o.pm++});
   return o;
 }
+// 🔍 찾기: 한글은 자모로 풀어서 비교 (입력 중인 글자·띄어쓰기·초성도 찾기)
+const KJ_C='ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ',KJ_V='ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ',KJ_T=['','ㄱ','ㄲ','ㄳ','ㄴ','ㄵ','ㄶ','ㄷ','ㄹ','ㄺ','ㄻ','ㄼ','ㄽ','ㄾ','ㄿ','ㅀ','ㅁ','ㅂ','ㅄ','ㅅ','ㅆ','ㅇ','ㅈ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+const KJ_X={'ㅘ':'ㅗㅏ','ㅙ':'ㅗㅐ','ㅚ':'ㅗㅣ','ㅝ':'ㅜㅓ','ㅞ':'ㅜㅔ','ㅟ':'ㅜㅣ','ㅢ':'ㅡㅣ','ㄳ':'ㄱㅅ','ㄵ':'ㄴㅈ','ㄶ':'ㄴㅎ','ㄺ':'ㄹㄱ','ㄻ':'ㄹㅁ','ㄼ':'ㄹㅂ','ㄽ':'ㄹㅅ','ㄾ':'ㄹㅌ','ㄿ':'ㄹㅍ','ㅀ':'ㄹㅎ','ㅄ':'ㅂㅅ'};
+function qBase(t){return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').normalize('NFC').toLowerCase().replace(/[’`]/g,"'").replace(/\s+/g,'')}
+function qJamo(t){let o='';for(const ch of t){const c=ch.charCodeAt(0)-0xAC00;if(c>=0&&c<11172){o+=KJ_C[(c/588)|0]+KJ_V[((c%588)/28)|0]+KJ_T[c%28]}else o+=ch}return o.replace(/[ㄱ-ㅣ]/g,m=>KJ_X[m]||m)}
+function qCho(t){let o='';for(const ch of t){const c=ch.charCodeAt(0)-0xAC00;o+=c>=0&&c<11172?KJ_C[(c/588)|0]:ch}return o}
+function qMatch(hay,q){
+  const ws=String(q||'').trim().split(/\s+/).filter(Boolean);if(!ws.length)return true;
+  const b=qBase(hay),J=qJamo(b),C=qCho(b);
+  return ws.every(w=>{const wb=qBase(w);return J.includes(qJamo(wb))||(/^[ㄱ-ㅎ]{2,}$/.test(wb)&&C.includes(wb))});
+}
 var ADDQ='';
 function addHits(){
-  const ws=lnKey(ADDQ).split(/\s+/).filter(Boolean);
-  return S.items.filter(x=>{const h=lnKey([x.fr,x.ko,x.pron,x.note].join(' '));return ws.every(w=>h.includes(w))}).sort((a,b)=>a.added<b.added?1:-1);
+  return S.items.filter(x=>qMatch([x.fr,x.ko,x.pron,x.note].join(' '),ADDQ)).sort((a,b)=>a.added<b.added?1:-1);
 }
 function addRes(){
   if(ADDQ.trim()){
@@ -608,7 +618,7 @@ function addLog(){
   const st=savedStats();
   return `<div class="card" id="addlog"><h2>📅 저장 기록</h2>
     <div class="stat4"><div><b>${st.t}</b><span>오늘</span></div><div><b>${st.w}</b><span>이번 주</span><small>지난주 ${st.pw}</small></div><div><b>${st.m}</b><span>이번 달</span><small>지난달 ${st.pm}</small></div><div><b>${st.all}</b><span>전체</span></div></div>
-    <input type="search" id="addq" placeholder="🔍 내가 저장한 표현 찾기 (불어·뜻·발음·메모)" value="${esc(ADDQ)}" autocomplete="off" autocapitalize="off" spellcheck="false" style="margin-bottom:8px">
+    <input type="search" id="addq" placeholder="🔍 표현 찾기 · 한글 뜻(예: 커피, ㅋㅍ)이나 불어로" value="${esc(ADDQ)}" autocomplete="off" autocapitalize="off" spellcheck="false" style="margin-bottom:8px">
     <div id="addres">${addRes()}</div></div>`;
 }
 function bindAddRes(){
@@ -1362,7 +1372,7 @@ function lnList(){
     if(LN.f==='new'&&x.added<from)return false;
     if(LN.f==='wrong'&&!S.wrong[x.id])return false;
     if((LN.f==='단어'||LN.f==='문장')&&x.kind!==LN.f)return false;
-    return !q||lnKey(x.fr+' '+x.ko+' '+(x.pron||'')).includes(q);
+    return !q||qMatch(x.fr+' '+x.ko+' '+(x.pron||'')+' '+(x.note||''),LN.q);
   }).slice().reverse().sort((a,b)=>a.added<b.added?1:a.added>b.added?-1:0);
 }
 function lnMark(id){document.querySelectorAll('.ln-row').forEach(b=>{const on=b.dataset.id===id;b.classList.toggle('on',on);const s=b.querySelector('.lb.say');if(s){s.classList.toggle('on',on);s.textContent=on?'🔉 원어민':'🔊 원어민'}})}
@@ -1405,7 +1415,7 @@ function vListen(){
   if(!voices.length)loadVoices();
   $('#view').innerHTML=`<div class="card"><div class="ln-top"><h2>듣고 말하기 <small class="muted" id="lncount"></small></h2>
     <div class="muted" style="font-size:13px;margin:-4px 0 8px">🔊 원어민 발음 → 🎙️ 내가 녹음 → ▶️ 내 목소리로 비교해요. 녹음은 이 기기에 저장돼요.</div>
-    <input type="search" id="lnq" placeholder="불어, 뜻, 발음으로 찾기" value="${esc(LN.q)}" autocomplete="off">
+    <input type="search" id="lnq" placeholder="한글 뜻이나 불어로 찾기 (예: 커피, ㅋㅍ)" value="${esc(LN.q)}" autocomplete="off">
     <div class="chips" style="margin-top:8px">${LN_F.map(([k,l])=>`<button class="chip ${LN.f===k?'on':''}" data-lf="${k}">${l}</button>`).join('')}</div>
     <div class="ln-tools"><button class="btn sm" id="lnall">▶ 전체 듣기</button><button class="btn sm" id="lnslow">${LN.slow?'🐢 천천히 켜짐':'🐢 천천히'}</button></div>
     </div>
