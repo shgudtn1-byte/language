@@ -586,23 +586,42 @@ function savedStats(){
   S.items.forEach(x=>{const a=x.added||'';if(a===t)o.t++;if(a>=w)o.w++;else if(a>=pw)o.pw++;if(a>=m)o.m++;else if(a>=pm)o.pm++});
   return o;
 }
-function addLog(){
-  const days=savedDays(true),st=savedStats();
+var ADDQ='';
+function addHits(){
+  const ws=lnKey(ADDQ).split(/\s+/).filter(Boolean);
+  return S.items.filter(x=>{const h=lnKey([x.fr,x.ko,x.pron,x.note].join(' '));return ws.every(w=>h.includes(w))}).sort((a,b)=>a.added<b.added?1:-1);
+}
+function addRes(){
+  if(ADDQ.trim()){
+    const hits=addHits();
+    return `<div class="muted" style="font-size:13px;margin-bottom:4px">🔍 “${esc(ADDQ.trim())}” 찾은 표현 ${hits.length}개 · 저장한 날짜 전체에서</div>
+    ${hits.length?hits.map(itemRow).join(''):'<div class="empty">찾는 표현이 없어요. 불어 일부나 한국어 뜻으로 찾아보세요.</div>'}`;
+  }
+  const days=savedDays(true);
   if(!days.some(([d])=>d===ADDDAY))ADDDAY=today();
   const list=S.items.filter(x=>x.added===ADDDAY).reverse();
+  return `<div class="dchips">${days.map(([d,n])=>`<button class="chip ${d===ADDDAY?'on':''}" data-day="${d}">${dayLabel(d)} <small>${n}</small></button>`).join('')}</div>
+    <div class="muted" style="font-size:13px;margin-bottom:4px">${dayFull(ADDDAY)} 저장한 표현 ${list.length}개 · 표현을 누르면 시험·녹음 기록이 보여요</div>
+    ${list.length?list.map(itemRow).join(''):'<div class="empty">아직 없어요. 오늘 배운 걸 하나 적어볼까요?</div>'}`;
+}
+function addLog(){
+  const st=savedStats();
   return `<div class="card" id="addlog"><h2>📅 저장 기록</h2>
     <div class="stat4"><div><b>${st.t}</b><span>오늘</span></div><div><b>${st.w}</b><span>이번 주</span><small>지난주 ${st.pw}</small></div><div><b>${st.m}</b><span>이번 달</span><small>지난달 ${st.pm}</small></div><div><b>${st.all}</b><span>전체</span></div></div>
-    <div class="dchips">${days.map(([d,n])=>`<button class="chip ${d===ADDDAY?'on':''}" data-day="${d}">${dayLabel(d)} <small>${n}</small></button>`).join('')}</div>
-    <div class="muted" style="font-size:13px;margin-bottom:4px">${dayFull(ADDDAY)} 저장한 표현 ${list.length}개 · 표현을 누르면 시험·녹음 기록이 보여요</div>
-    ${list.length?list.map(itemRow).join(''):'<div class="empty">아직 없어요. 오늘 배운 걸 하나 적어볼까요?</div>'}</div>`;
+    <input type="search" id="addq" placeholder="🔍 내가 저장한 표현 찾기 (불어·뜻·발음·메모)" value="${esc(ADDQ)}" autocomplete="off" autocapitalize="off" spellcheck="false" style="margin-bottom:8px">
+    <div id="addres">${addRes()}</div></div>`;
+}
+function bindAddRes(){
+  document.querySelectorAll('#addres [data-day]').forEach(b=>b.onclick=()=>{ADDDAY=b.dataset.day;const sx=$('#addres .dchips').scrollLeft;$('#addres').innerHTML=addRes();$('#addres .dchips').scrollLeft=sx;bindAddRes()});
+  bindRows();
 }
 function bindAddLog(){
-  document.querySelectorAll('#addlog [data-day]').forEach(b=>b.onclick=()=>{ADDDAY=b.dataset.day;const box=$('#addlog'),sx=box.querySelector('.dchips').scrollLeft;box.outerHTML=addLog();$('#addlog .dchips').scrollLeft=sx;bindAddLog()});
-  bindRows();
+  $('#addq').oninput=e=>{ADDQ=e.target.value;$('#addres').innerHTML=addRes();bindAddRes()};
+  bindAddRes();
 }
 let draftImg=null;
 function vAdd(){
-  ADDDAY=today();
+  ADDDAY=today();ADDQ="";
   const todays=S.items.filter(x=>x.added===today()).reverse();
   $('#view').innerHTML=`
   <div class="card"><h2>오늘 배운 것 저장 ✏️</h2>
