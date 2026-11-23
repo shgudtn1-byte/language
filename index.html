@@ -81,6 +81,9 @@ label.f{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
 @keyframes mvpulse{50%{opacity:.65}}
 .stat4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;margin:4px 0 12px}
 .stat4 b{display:block;font-size:24px;line-height:1.2}.stat4 span{font-size:12px;color:var(--muted)}.stat4 small{display:block;font-size:11px;color:var(--muted)}
+.findcard{padding:12px}.findwrap{position:relative}.findwrap .findic{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:20px;pointer-events:none}
+#addq{width:100%;box-sizing:border-box;font-size:18px;padding:14px 14px 14px 46px;border:2px solid var(--accent);border-radius:14px;background:var(--card);color:var(--ink)}
+#addq:focus{outline:none;box-shadow:0 0 0 3px var(--soft)}
 .dchips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;margin-bottom:4px;-webkit-overflow-scrolling:touch}.dchips .chip{flex:none;white-space:nowrap}
 .ln-day{display:flex;align-items:center;gap:8px;justify-content:space-between;font-weight:700;padding:14px 4px 6px;border-top:2px solid var(--line);color:var(--accent)}
 [data-st]{cursor:pointer}
@@ -601,12 +604,21 @@ var ADDQ='';
 function addHits(){
   return S.items.filter(x=>qMatch([x.fr,x.ko,x.pron,x.note].join(' '),ADDQ)).sort((a,b)=>a.added<b.added?1:-1);
 }
+function findRes(){
+  if(!ADDQ.trim())return '';
+  const hits=addHits();
+  return `<div class="muted" style="font-size:13px;margin:8px 0 4px">“${esc(ADDQ.trim())}” 찾은 표현 ${hits.length}개 · 저장한 날짜 전체에서</div>
+    ${hits.length?hits.map(itemRow).join(''):'<div class="empty">찾는 표현이 없어요. 한글 뜻 일부나 불어로 찾아보세요.</div>'}`;
+}
+function findBox(){
+  return `<div class="card findcard"><div class="findwrap"><span class="findic">🔍</span><input type="search" id="addq" placeholder="내 표현 찾기 · 한글 뜻이나 불어" value="${esc(ADDQ)}" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search"></div><div id="findres">${findRes()}</div></div>`;
+}
+function bindFind(){
+  const draw=()=>{$('#findres').innerHTML=findRes();bindRows()};
+  $('#addq').oninput=e=>{ADDQ=e.target.value;draw()};
+  $('#addq').onkeydown=e=>{if(e.key==='Enter')e.target.blur()};
+}
 function addRes(){
-  if(ADDQ.trim()){
-    const hits=addHits();
-    return `<div class="muted" style="font-size:13px;margin-bottom:4px">🔍 “${esc(ADDQ.trim())}” 찾은 표현 ${hits.length}개 · 저장한 날짜 전체에서</div>
-    ${hits.length?hits.map(itemRow).join(''):'<div class="empty">찾는 표현이 없어요. 불어 일부나 한국어 뜻으로 찾아보세요.</div>'}`;
-  }
   const days=savedDays(true);
   if(!days.some(([d])=>d===ADDDAY))ADDDAY=today();
   const list=S.items.filter(x=>x.added===ADDDAY).reverse();
@@ -618,7 +630,6 @@ function addLog(){
   const st=savedStats();
   return `<div class="card" id="addlog"><h2>📅 저장 기록</h2>
     <div class="stat4"><div><b>${st.t}</b><span>오늘</span></div><div><b>${st.w}</b><span>이번 주</span><small>지난주 ${st.pw}</small></div><div><b>${st.m}</b><span>이번 달</span><small>지난달 ${st.pm}</small></div><div><b>${st.all}</b><span>전체</span></div></div>
-    <input type="search" id="addq" placeholder="🔍 표현 찾기 · 한글 뜻(예: 커피, ㅋㅍ)이나 불어로" value="${esc(ADDQ)}" autocomplete="off" autocapitalize="off" spellcheck="false" style="margin-bottom:8px">
     <div id="addres">${addRes()}</div></div>`;
 }
 function bindAddRes(){
@@ -626,14 +637,13 @@ function bindAddRes(){
   bindRows();
 }
 function bindAddLog(){
-  $('#addq').oninput=e=>{ADDQ=e.target.value;$('#addres').innerHTML=addRes();bindAddRes()};
   bindAddRes();
 }
 let draftImg=null;
 function vAdd(){
   ADDDAY=today();ADDQ="";
   const todays=S.items.filter(x=>x.added===today()).reverse();
-  $('#view').innerHTML=`
+  $('#view').innerHTML=`${findBox()}
   <div class="card"><h2>오늘 배운 것 저장 ✏️</h2>
     <label class="f">🇰🇷 하고 싶은 말을 한국말로 <span class="muted" style="font-size:12px">(불어를 모를 때)</span></label>
     <textarea id="kr" maxlength="300" style="min-height:52px" placeholder="예: 물 한 잔만 주실 수 있을까요?"></textarea>
@@ -655,6 +665,7 @@ function vAdd(){
     <div class="muted" style="margin-top:8px">⌘/Ctrl + Enter로도 저장돼요.</div>
   </div>
   ${addLog()}`;
+  bindFind();
   bindAddLog();
   const fr=$('#fr'),ko=$('#ko');
   const prev=()=>{const im=draftImg?(draftImg.t==='none'?null:draftImg):(autoEmoji(fr.value,ko.value)?{t:'emoji',v:autoEmoji(fr.value,ko.value)}:null);
@@ -846,7 +857,7 @@ function itemRow(x){
 function bindRows(){
   document.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
     if(!confirm('이 표현을 지울까요?'))return;
-    S.items=S.items.filter(x=>x.id!==b.dataset.del);delete S.wrong[b.dataset.del];save();if(tab==='add'&&$('#addlog')){const y=scrollY;$('#addlog').outerHTML=addLog();bindAddLog();scrollTo(0,y)}else render();
+    S.items=S.items.filter(x=>x.id!==b.dataset.del);delete S.wrong[b.dataset.del];save();if(tab==='add'&&$('#addlog')){const y=scrollY;$('#addlog').outerHTML=addLog();bindAddLog();if($('#findres')){$('#findres').innerHTML=findRes();bindRows()}scrollTo(0,y)}else render();
   });
 }
 
